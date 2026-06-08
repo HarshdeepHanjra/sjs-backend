@@ -7,7 +7,8 @@ from datetime import datetime
 
 contact_bp = Blueprint('contact', __name__)
 
-@contact_bp.route('/contact/send', methods=['POST', 'OPTIONS'])
+# ✅ FIXED: Remove duplicate /contact/ - route will be /api/contact/send
+@contact_bp.route('/send', methods=['POST', 'OPTIONS'])
 def send_contact_email():
     if request.method == 'OPTIONS':
         return '', 200
@@ -21,6 +22,9 @@ def send_contact_email():
         
         if not name or not email or not message:
             return jsonify({'error': 'Name, email, and message are required'}), 400
+        
+        # Get frontend URL from environment
+        frontend_url = os.getenv('FRONTEND_URL', 'https://sjs-frontend-delta.vercel.app')
         
         # Create email to send to sjsglobaltech@gmail.com
         html_content = f"""
@@ -123,7 +127,7 @@ def send_contact_email():
                     </div>
                     <p>In the meantime, feel free to:</p>
                     <ul>
-                        <li>Browse our courses at <a href="http://localhost:3000/courses">http://localhost:3000/courses</a></li>
+                        <li>Browse our courses at <a href="{frontend_url}/courses">{frontend_url}/courses</a></li>
                         <li>Check out our internship opportunities</li>
                         <li>Follow us on social media for updates</li>
                     </ul>
