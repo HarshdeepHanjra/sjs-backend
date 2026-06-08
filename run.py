@@ -16,13 +16,8 @@ load_dotenv()
 app = create_app()
 
 # =====================================================
-# HEALTH CHECK ENDPOINTS (for Render)
+# ONLY db-test ENDPOINT (health already in __init__.py)
 # =====================================================
-
-@app.route('/health')
-def health():
-    """Health check endpoint for Render"""
-    return jsonify({'status': 'ok', 'message': 'Server is healthy'})
 
 @app.route('/db-test')
 def db_test():
