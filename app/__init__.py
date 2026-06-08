@@ -21,22 +21,33 @@ def create_app():
     app = Flask(__name__)
     
     # =====================================================
-    # CLOUDINARY CONFIGURATION (Inside create_app)
+    # CLOUDINARY CONFIGURATION
     # =====================================================
     cloudinary.config(
-        cloud_name=os.getenv('CLOUDINARY_CLOUD_NAME'),
-        api_key=os.getenv('CLOUDINARY_API_KEY'),
-        api_secret=os.getenv('CLOUDINARY_API_SECRET'),
+        cloud_name=os.getenv('CLOUDINARY_CLOUD_NAME', 'dxxpeilta'),
+        api_key=os.getenv('CLOUDINARY_API_KEY', '375175513582196'),
+        api_secret=os.getenv('CLOUDINARY_API_SECRET', '48p-JTyxEEylHjS2733gA6KeTbU'),
         secure=True
     )
     print("✅ Cloudinary configured successfully!")
     
-    # Database configuration
-    DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:098%40Gangahanjra@localhost:5432/sjs_academy')
+    # =====================================================
+    # DATABASE CONFIGURATION (Your Supabase)
+    # =====================================================
+    # Your Supabase credentials
+    SUPABASE_HOST = "aws-1-ap-south-1.pooler.supabase.com"
+    SUPABASE_PORT = "5432"
+    SUPABASE_DATABASE = "postgres"
+    SUPABASE_USER = "postgres.fswgvwxebocygqjotgrv"
+    SUPABASE_PASSWORD = "098@Sjsglobaltech"
     
-    app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
+    # Construct DATABASE_URL
+    # Note: @ symbol is encoded as %40
+    DATABASE_URL = f"postgresql://{SUPABASE_USER}:{SUPABASE_PASSWORD.replace('@', '%40')}@{SUPABASE_HOST}:{SUPABASE_PORT}/{SUPABASE_DATABASE}"
+    
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', DATABASE_URL)
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'sjs-academy-secret-key')
+    app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'sjs-academy-secret-key-2024')
     
     # Upload folder configuration
     app.config['UPLOAD_FOLDER'] = os.path.join('uploads', 'screenshots')
@@ -52,13 +63,12 @@ def create_app():
     app.config['MAIL_PORT'] = 587
     app.config['MAIL_USE_TLS'] = True
     app.config['MAIL_USE_SSL'] = False
-    app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
-    app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
+    app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME', 'sjsglobaltech@gmail.com')
+    app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD', 'oijb jpqd ivgc upbt')
     app.config['MAIL_DEFAULT_SENDER'] = ('SJS Academy', 'noreply@sjsacademy.com')
     app.config['MAIL_SUPPRESS_SEND'] = os.getenv('MAIL_SUPPRESS_SEND', 'False').lower() == 'true'
     
     print(f"Email configured for: {app.config['MAIL_USERNAME']}")
-    print(f"Email sending suppressed: {app.config['MAIL_SUPPRESS_SEND']}")
     
     # Create upload folders
     os.makedirs('uploads/screenshots', exist_ok=True)
@@ -68,7 +78,7 @@ def create_app():
     # =====================================================
     # CORS Configuration
     # =====================================================
-    cors_origins = os.getenv('CORS_ORIGINS', 'http://localhost:3000').split(',')
+    cors_origins = os.getenv('CORS_ORIGINS', 'https://sjs-frontend-delta.vercel.app,https://sjs-frontend.vercel.app,http://localhost:3000,http://localhost:5173').split(',')
     CORS(app, 
          origins=cors_origins,
          methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
