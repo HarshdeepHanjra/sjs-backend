@@ -71,14 +71,49 @@ def create_app():
     os.makedirs('uploads/mentors', exist_ok=True)
     
     # =====================================================
-    # CORS Configuration
+    # CORS Configuration - ENHANCED FIX
     # =====================================================
-    cors_origins = os.getenv('CORS_ORIGINS', 'https://sjs-frontend-delta.vercel.app,https://sjs-frontend.vercel.app,http://localhost:3000,http://localhost:5173').split(',')
+    
+    # Allowed origins for CORS
+    ALLOWED_ORIGINS = [
+        "https://sjs-frontend-delta.vercel.app",
+        "https://sjs-frontend.vercel.app",
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173"
+    ]
+    
+    # Get from environment variable if set
+    env_origins = os.getenv('CORS_ORIGINS', '')
+    if env_origins:
+        ALLOWED_ORIGINS.extend([origin.strip() for origin in env_origins.split(',')])
+    
+    # Remove duplicates
+    ALLOWED_ORIGINS = list(set(ALLOWED_ORIGINS))
+    
+    # Configure CORS
     CORS(app, 
-         origins=cors_origins,
-         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-         allow_headers=["Content-Type", "Authorization"],
-         supports_credentials=True)
+         origins=ALLOWED_ORIGINS,
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+         allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+         supports_credentials=True,
+         expose_headers=["Content-Type", "Authorization"],
+         max_age=3600)
+    
+    # ✅ Add after_request handler for extra CORS safety
+    @app.after_request
+    def after_request(response):
+        origin = request.headers.get('Origin')
+        if origin in ALLOWED_ORIGINS:
+            response.headers.add('Access-Control-Allow-Origin', origin)
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS,PATCH')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+    
+    print(f"✅ CORS configured successfully!")
+    print(f"   Allowed origins: {ALLOWED_ORIGINS}")
     
     # Initialize extensions with app
     db.init_app(app)
@@ -100,7 +135,7 @@ def create_app():
     from app.routes.contact import contact_bp
     from app.routes.mentor import mentor_bp
     
-    # ✅ FIXED: Consistent blueprint registration with /api prefix
+    # Register blueprints with consistent /api prefix
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(courses_bp, url_prefix='/api/courses')
     app.register_blueprint(cart_bp, url_prefix='/api/cart')
@@ -165,5 +200,14 @@ def create_app():
     @app.route('/health')
     def health():
         return jsonify({'status': 'ok', 'message': 'Server is healthy'})
+    
+    # ✅ Add OPTIONS handler for all routes (extra CORS safety)
+    @app.route('/<path:path>', methods=['OPTIONS'])
+    def handle_options(path):
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        return response
     
     return app
