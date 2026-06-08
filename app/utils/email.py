@@ -2,14 +2,16 @@
 from flask import current_app
 from flask_mail import Message
 from app import mail
+import os
 
 def send_password_reset_email(user, reset_token):
     """
     Send password reset email to user
     """
     try:
-        # Build reset URL
-        reset_url = f"http://localhost:3000/reset-password?token={reset_token}"
+        # Get frontend URL from environment
+        frontend_url = os.getenv('FRONTEND_URL', 'https://sjs-frontend-delta.vercel.app')
+        reset_url = f"{frontend_url}/reset-password?token={reset_token}"
         
         subject = "Password Reset Request - SJS Academy"
         
@@ -96,6 +98,7 @@ def send_password_reset_email(user, reset_token):
 def send_welcome_email(user):
     """Send welcome email to new user"""
     try:
+        frontend_url = os.getenv('FRONTEND_URL', 'https://sjs-frontend-delta.vercel.app')
         subject = "Welcome to SJS Academy!"
         
         html_content = f"""
@@ -108,6 +111,8 @@ def send_welcome_email(user):
                 .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
                 .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
                            color: white; padding: 30px; text-align: center; }}
+                .button {{ display: inline-block; background: #667eea; color: white; 
+                          padding: 12px 30px; text-decoration: none; border-radius: 5px; }}
             </style>
         </head>
         <body>
@@ -119,7 +124,13 @@ def send_welcome_email(user):
                     <p>Dear <strong>{user.name}</strong>,</p>
                     <p>Thank you for registering with SJS Academy. We're excited to have you on board!</p>
                     <p>Start exploring our courses and begin your learning journey today.</p>
-                    <p><a href="http://localhost:3000/courses">Browse Courses →</a></p>
+                    <p style="text-align: center;">
+                        <a href="{frontend_url}/courses" class="button" style="color: white;">Browse Courses →</a>
+                    </p>
+                </div>
+                <div class="footer">
+                    <p>SJS Global Tech Academy</p>
+                    <p>© 2024 SJS Academy. All rights reserved.</p>
                 </div>
             </div>
         </body>
