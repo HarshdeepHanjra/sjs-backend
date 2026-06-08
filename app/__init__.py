@@ -34,26 +34,21 @@ def create_app():
     # =====================================================
     # DATABASE CONFIGURATION (Your Supabase)
     # =====================================================
-    # Your Supabase credentials
     SUPABASE_HOST = "aws-1-ap-south-1.pooler.supabase.com"
     SUPABASE_PORT = "5432"
     SUPABASE_DATABASE = "postgres"
     SUPABASE_USER = "postgres.fswgvwxebocygqjotgrv"
     SUPABASE_PASSWORD = "098@Sjsglobaltech"
     
-    # Construct DATABASE_URL
-    # Note: @ symbol is encoded as %40
     DATABASE_URL = f"postgresql://{SUPABASE_USER}:{SUPABASE_PASSWORD.replace('@', '%40')}@{SUPABASE_HOST}:{SUPABASE_PORT}/{SUPABASE_DATABASE}"
     
     app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', DATABASE_URL)
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'sjs-academy-secret-key-2024')
     
-    # Upload folder configuration
     app.config['UPLOAD_FOLDER'] = os.path.join('uploads', 'screenshots')
     app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
     
-    # JWT Configuration
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=30)
     
     # =====================================================
@@ -105,17 +100,18 @@ def create_app():
     from app.routes.contact import contact_bp
     from app.routes.mentor import mentor_bp
     
+    # ✅ FIXED: Consistent blueprint registration with /api prefix
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
-    app.register_blueprint(courses_bp, url_prefix='/api')
+    app.register_blueprint(courses_bp, url_prefix='/api/courses')
     app.register_blueprint(cart_bp, url_prefix='/api/cart')
     app.register_blueprint(payments_bp, url_prefix='/api/payment')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
-    app.register_blueprint(internships_bp, url_prefix='/api')
-    app.register_blueprint(certificates_bp)
+    app.register_blueprint(internships_bp, url_prefix='/api/internships')
+    app.register_blueprint(certificates_bp, url_prefix='/api/certificates')
     app.register_blueprint(user_bp, url_prefix='/api/user')
-    app.register_blueprint(attendance_bp)
-    app.register_blueprint(contact_bp, url_prefix='/api')
-    app.register_blueprint(mentor_bp)
+    app.register_blueprint(attendance_bp, url_prefix='/api')
+    app.register_blueprint(contact_bp, url_prefix='/api/contact')
+    app.register_blueprint(mentor_bp, url_prefix='/api/mentor')
     
     # =====================================================
     # STATIC FILE SERVING
