@@ -71,10 +71,10 @@ def create_app():
     os.makedirs('uploads/mentors', exist_ok=True)
     
     # =====================================================
-    # CORS Configuration - ENHANCED FIX
+    # CORS Configuration - SINGLE SOURCE OF TRUTH (FIXED)
     # =====================================================
     
-    # Allowed origins for CORS
+    # Allowed origins (remove duplicates)
     ALLOWED_ORIGINS = [
         "https://sjs-frontend-delta.vercel.app",
         "https://sjs-frontend.vercel.app",
@@ -84,15 +84,10 @@ def create_app():
         "http://127.0.0.1:5173"
     ]
     
-    # Get from environment variable if set
-    env_origins = os.getenv('CORS_ORIGINS', '')
-    if env_origins:
-        ALLOWED_ORIGINS.extend([origin.strip() for origin in env_origins.split(',')])
-    
     # Remove duplicates
     ALLOWED_ORIGINS = list(set(ALLOWED_ORIGINS))
     
-    # Configure CORS
+    # Single CORS configuration (NO @app.after_request)
     CORS(app, 
          origins=ALLOWED_ORIGINS,
          methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
@@ -100,17 +95,6 @@ def create_app():
          supports_credentials=True,
          expose_headers=["Content-Type", "Authorization"],
          max_age=3600)
-    
-    # ✅ Add after_request handler for extra CORS safety
-    @app.after_request
-    def after_request(response):
-        origin = request.headers.get('Origin')
-        if origin in ALLOWED_ORIGINS:
-            response.headers.add('Access-Control-Allow-Origin', origin)
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS,PATCH')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response
     
     print(f"✅ CORS configured successfully!")
     print(f"   Allowed origins: {ALLOWED_ORIGINS}")
@@ -200,14 +184,5 @@ def create_app():
     @app.route('/health')
     def health():
         return jsonify({'status': 'ok', 'message': 'Server is healthy'})
-    
-    # ✅ Add OPTIONS handler for all routes (extra CORS safety)
-    @app.route('/<path:path>', methods=['OPTIONS'])
-    def handle_options(path):
-        response = jsonify({})
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-        return response
     
     return app
