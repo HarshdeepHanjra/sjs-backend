@@ -7,6 +7,7 @@ from app.models.attendance import Attendance, AttendanceSummary
 from app.models.internship import Internship, InternshipOrder, InternshipEnrollment
 from app.models.certificate import Certificate, StudentProgress, VerificationLog, StudentPublicProfile
 from flask import jsonify
+from flask_cors import CORS
 import os
 from dotenv import load_dotenv
 
@@ -15,8 +16,11 @@ load_dotenv()
 
 app = create_app()
 
+# ✅ Additional CORS middleware for extra safety
+CORS(app, supports_credentials=True)
+
 # =====================================================
-# ONLY db-test ENDPOINT (health already in __init__.py)
+# DATABASE TEST ENDPOINT
 # =====================================================
 
 @app.route('/db-test')
@@ -59,6 +63,7 @@ if __name__ == '__main__':
     print("=" * 60)
     print(f"📡 Server running on: http://0.0.0.0:{port}")
     print(f"🔐 Environment: {'Development' if debug_mode else 'Production'}")
+    print(f"🌐 CORS Enabled for multiple origins")
     print(f"🐘 Database: Supabase")
     print("=" * 60)
     
