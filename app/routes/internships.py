@@ -8,8 +8,16 @@ from app.models.payment import PaymentVerification
 from app.utils.helpers import generate_order_id, generate_verification_id
 from app.utils.decorators import token_required, admin_required
 from datetime import datetime
+from werkzeug.utils import secure_filename
 
 internships_bp = Blueprint('internships', __name__)
+
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+
+def allowed_file(filename):
+    """Check if file extension is allowed"""
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 @internships_bp.route('/test', methods=['GET', 'OPTIONS'])
 def test_internship_route():
@@ -17,16 +25,18 @@ def test_internship_route():
         return '', 200
     return jsonify({'status': 'ok', 'message': 'Internship route working'}), 200
 
-@internships_bp.route('/internships', methods=['GET', 'OPTIONS'])
+
+# ✅ FIXED: Remove duplicate /internships/ - route will be /api/internships
+@internships_bp.route('/', methods=['GET', 'OPTIONS'])
 def get_internships():
     if request.method == 'OPTIONS':
         return '', 200
     
-    # Get internships from database or return default data
     internships = Internship.query.filter_by(is_active=True).all()
     
     if internships:
         return jsonify({
+            'success': True,
             'internships': [{
                 'id': i.id,
                 'title': i.title,
@@ -49,9 +59,10 @@ def get_internships():
             {'id': 1, 'title': 'Data Science Internship', 'category': 'Data Science', 'duration': '3 Months', 'fee': 6000, 'original_fee': 19999, 'stipend': 'Unpaid', 'mode': 'Online', 'slots': 50, 'enrolled': 234, 'rating': 4.9, 'description': 'Learn Data Science from scratch with real-world projects.', 'benefits': ['With Certification', 'Live Projects', 'Industry Mentors']},
             {'id': 2, 'title': 'Web Development Internship', 'category': 'Development', 'duration': '2 Months', 'fee': 0, 'original_fee': 14999, 'stipend': 'Unpaid', 'mode': 'Online', 'slots': 40, 'enrolled': 156, 'rating': 4.8, 'description': 'Master MERN stack development.', 'benefits': ['Live Coding Sessions', 'Portfolio Development', 'Certificate']},
         ]
-        return jsonify({'internships': default_internships}), 200
+        return jsonify({'success': True, 'internships': default_internships}), 200
 
-@internships_bp.route('/internship/<int:internship_id>', methods=['GET', 'OPTIONS'])
+
+@internships_bp.route('/<int:internship_id>', methods=['GET', 'OPTIONS'])
 def get_internship_detail(internship_id):
     if request.method == 'OPTIONS':
         return '', 200
@@ -60,26 +71,30 @@ def get_internship_detail(internship_id):
     
     if internship:
         return jsonify({
-            'id': internship.id,
-            'title': internship.title,
-            'category': internship.category,
-            'duration': internship.duration,
-            'fee': float(internship.fee),
-            'original_fee': float(internship.original_fee) if internship.original_fee else None,
-            'stipend': internship.stipend,
-            'mode': internship.mode,
-            'slots': internship.slots,
-            'enrolled': internship.enrolled,
-            'rating': float(internship.rating),
-            'description': internship.description,
-            'syllabus': internship.syllabus or [],
-            'benefits': internship.benefits or [],
-            'requirements': internship.requirements or []
+            'success': True,
+            'internship': {
+                'id': internship.id,
+                'title': internship.title,
+                'category': internship.category,
+                'duration': internship.duration,
+                'fee': float(internship.fee),
+                'original_fee': float(internship.original_fee) if internship.original_fee else None,
+                'stipend': internship.stipend,
+                'mode': internship.mode,
+                'slots': internship.slots,
+                'enrolled': internship.enrolled,
+                'rating': float(internship.rating),
+                'description': internship.description,
+                'syllabus': internship.syllabus or [],
+                'benefits': internship.benefits or [],
+                'requirements': internship.requirements or []
+            }
         }), 200
     else:
         return jsonify({'error': 'Internship not found'}), 404
 
-@internships_bp.route('/internship/create-order', methods=['POST', 'OPTIONS'])
+
+@internships_bp.route('/create-order', methods=['POST', 'OPTIONS'])
 @token_required
 def create_internship_order():
     if request.method == 'OPTIONS':
@@ -94,7 +109,6 @@ def create_internship_order():
         amount = data.get('amount', 0)
         phone = data.get('phone', '')
         
-        # Get student with correct ID
         student = Student.query.get(user['id'])
         if not student:
             return jsonify({'error': 'Student not found'}), 404
@@ -103,7 +117,7 @@ def create_internship_order():
         
         new_order = InternshipOrder(
             order_id=order_id,
-            student_id=student.id,  # Use student.id instead of user['id']
+            student_id=student.id,
             student_name=student.name,
             student_email=student.email,
             student_phone=phone,
@@ -132,9 +146,9 @@ def create_internship_order():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
-    
-    
-@internships_bp.route('/internship/enroll-free', methods=['POST', 'OPTIONS'])
+
+
+@internships_bp.route('/enroll-free', methods=['POST', 'OPTIONS'])
 @token_required
 def enroll_free_internship():
     """Enroll in free internship"""
@@ -152,11 +166,9 @@ def enroll_free_internship():
         if not student:
             return jsonify({'error': 'Student not found'}), 404
         
-        # Check if already enrolled
         if student.internship_ids and internship_id in student.internship_ids:
             return jsonify({'error': 'Already enrolled in this internship'}), 400
         
-        # Create order
         order_id = generate_order_id()
         
         new_order = InternshipOrder(
@@ -173,7 +185,6 @@ def enroll_free_internship():
         
         db.session.add(new_order)
         
-        # ✅ Update student's internship_ids
         if student.internship_ids is None:
             student.internship_ids = []
         if internship_id not in student.internship_ids:
@@ -190,51 +201,9 @@ def enroll_free_internship():
         db.session.rollback()
         print(f"Enroll free error: {e}")
         return jsonify({'error': str(e)}), 500
-    
-@internships_bp.route('/admin/internship-payment-requests/<int:payment_id>/approve', methods=['POST', 'OPTIONS'])
-@admin_required
-def approve_internship_payment(payment_id):
-    """Approve internship payment (Admin)"""
-    if request.method == 'OPTIONS':
-        return '', 200
-    
-    try:
-        data = request.get_json()
-        admin_notes = data.get('notes', 'Internship payment verified and approved.')
-        
-        payment = InternshipOrder.query.get(payment_id)
-        if not payment:
-            return jsonify({'error': 'Payment not found'}), 404
-        
-        payment.payment_status = 'completed'
-        payment.status = 'active'
-        payment.admin_notes = admin_notes
-        payment.verified_at = datetime.utcnow()
-        
-        # ✅ Update student's internship_ids
-        student = Student.query.get(payment.student_id)
-        if student:
-            if student.internship_ids is None:
-                student.internship_ids = []
-            if payment.internship_id not in student.internship_ids:
-                student.internship_ids.append(payment.internship_id)
-                print(f"✅ Added internship {payment.internship_id} to student {student.id} internship_ids")
-        
-        db.session.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': 'Internship payment approved! Student enrolled.'
-        }), 200
-        
-    except Exception as e:
-        db.session.rollback()
-        print(f"Approve error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
 
-@internships_bp.route('/internship/upload-screenshot', methods=['POST', 'OPTIONS'])
+
+@internships_bp.route('/upload-screenshot', methods=['POST', 'OPTIONS'])
 @token_required
 def upload_internship_screenshot():
     """Upload internship payment screenshot from frontend"""
@@ -254,35 +223,24 @@ def upload_internship_screenshot():
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
         
-        # Check if file type is allowed
         if not allowed_file(file.filename):
             return jsonify({'error': 'Invalid file type. Allowed: png, jpg, jpeg, gif, webp'}), 400
         
-        # Import secure_filename here or at top of file
-        from werkzeug.utils import secure_filename
-        from datetime import datetime
-        import os
-        
-        # Generate secure filename
         original_filename = secure_filename(file.filename)
         timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
         filename = f"{order_id}_{timestamp}_{original_filename}"
         
-        # Create upload directory
         upload_dir = os.path.join('uploads', 'screenshots')
         os.makedirs(upload_dir, exist_ok=True)
         
-        # Save file
         filepath = os.path.join(upload_dir, filename)
         file.save(filepath)
         
         print(f"✅ Internship screenshot saved to: {filepath}")
         print(f"   File size: {os.path.getsize(filepath)} bytes")
         
-        # URL for frontend
         screenshot_url = f"/uploads/screenshots/{filename}"
         
-        # Update internship order with screenshot URL
         internship_order = InternshipOrder.query.filter_by(order_id=order_id).first()
         if internship_order:
             internship_order.screenshot_url = screenshot_url
@@ -302,8 +260,9 @@ def upload_internship_screenshot():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
-    
-@internships_bp.route('/internship/verify-payment', methods=['POST', 'OPTIONS'])
+
+
+@internships_bp.route('/verify-payment', methods=['POST', 'OPTIONS'])
 @token_required
 def verify_internship_payment():
     if request.method == 'OPTIONS':
@@ -319,7 +278,6 @@ def verify_internship_payment():
         if not internship_order:
             return jsonify({'error': 'Order not found'}), 404
         
-        # Create payment verification record
         verification_id = generate_verification_id()
         
         verification = PaymentVerification(
@@ -350,42 +308,67 @@ def verify_internship_payment():
         print(f"Error verifying internship payment: {e}")
         return jsonify({'error': str(e)}), 500
 
-@internships_bp.route('/student/internships', methods=['GET', 'OPTIONS'])
+
+# ✅ FIXED: Route for student's my-internships
+@internships_bp.route('/my-internships', methods=['GET', 'OPTIONS'])
 @token_required
-def get_student_internships():
+def get_my_internships():
+    """Get all internships the student is enrolled in"""
     if request.method == 'OPTIONS':
         return '', 200
     
     try:
         user = request.user
+        student = Student.query.get(user['id'])
         
-        enrollments = InternshipEnrollment.query.filter_by(student_id=user['id']).order_by(InternshipEnrollment.enrolled_at.desc()).all()
+        if not student:
+            return jsonify({'error': 'Student not found'}), 404
         
-        result = []
-        for enrollment in enrollments:
-            internship = Internship.query.get(enrollment.internship_id)
+        internships_list = []
+        
+        # Get from internship_ids JSON field
+        if student.internship_ids and len(student.internship_ids) > 0:
+            for internship_id in student.internship_ids:
+                internship = Internship.query.get(internship_id)
+                if internship:
+                    internships_list.append({
+                        'id': internship.id,
+                        'title': internship.title,
+                        'duration': internship.duration,
+                        'description': internship.description,
+                        'mode': internship.mode,
+                        'fee': float(internship.fee),
+                        'status': 'active',
+                        'enrolled_at': datetime.utcnow().isoformat()
+                    })
+        
+        # Also get from InternshipOrder table for completed payments
+        orders = InternshipOrder.query.filter_by(
+            student_id=student.id,
+            payment_status='completed'
+        ).all()
+        
+        for order in orders:
+            internship = Internship.query.get(order.internship_id)
             if internship:
-                result.append({
-                    'id': enrollment.id,
-                    'internship_id': internship.id,
-                    'title': internship.title,
-                    'duration': internship.duration,
-                    'fee': float(internship.fee),
-                    'status': enrollment.status,
-                    'enrolled_at': enrollment.enrolled_at.isoformat()
-                })
+                if not any(i.get('id') == internship.id for i in internships_list):
+                    internships_list.append({
+                        'id': internship.id,
+                        'title': internship.title,
+                        'duration': internship.duration,
+                        'description': internship.description,
+                        'mode': internship.mode,
+                        'fee': float(internship.fee),
+                        'status': order.status or 'active',
+                        'enrolled_at': order.created_at.isoformat() if order.created_at else None
+                    })
         
         return jsonify({
             'success': True,
-            'enrollments': result,
-            'count': len(result)
+            'internships': internships_list,
+            'count': len(internships_list)
         }), 200
         
     except Exception as e:
-        print(f"Error getting student internships: {e}")
-        return jsonify({'error': str(e)}), 500
-
-def allowed_file(filename):
-    """Check if file extension is allowed"""
-    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+        print(f"Error getting my internships: {e}")
+        return jsonify({'error': str(e), 'internships': []}), 500
