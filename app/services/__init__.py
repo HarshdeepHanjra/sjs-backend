@@ -1,0 +1,1 @@
+from app.services.certificate_service import generate_qr_code, check_certificate_eligibility
