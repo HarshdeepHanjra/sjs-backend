@@ -8,7 +8,7 @@ from werkzeug.utils import secure_filename
 from flask import current_app
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'pdf', 'webp'}
-JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'sjs-academy-secret-key')
+JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'sjs-academy-secret-key-2024')  # ✅ Fixed
 
 def generate_student_id():
     year = datetime.now().strftime('%Y')
