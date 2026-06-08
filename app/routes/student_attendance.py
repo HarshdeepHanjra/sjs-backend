@@ -6,7 +6,8 @@ from app.utils.decorators import student_required
 
 student_attendance_bp = Blueprint('student_attendance', __name__)
 
-@student_attendance_bp.route('/api/student/attendance/my-attendance', methods=['GET', 'OPTIONS'])
+# ✅ FIXED: Remove duplicate /api/ - route will be /api/student/attendance/my-attendance
+@student_attendance_bp.route('/my-attendance', methods=['GET', 'OPTIONS'])
 @student_required
 def get_my_attendance():
     if request.method == 'OPTIONS':
@@ -54,4 +55,37 @@ def get_my_attendance():
         }), 200
     except Exception as e:
         print(f"Error getting my attendance: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@student_attendance_bp.route('/monthly', methods=['GET', 'OPTIONS'])
+@student_required
+def get_monthly_attendance():
+    if request.method == 'OPTIONS':
+        return '', 200
+    
+    try:
+        student_id = request.user['id']
+        
+        summaries = AttendanceSummary.query.filter_by(student_id=student_id).order_by(AttendanceSummary.month.desc()).all()
+        
+        monthly_data = []
+        for summary in summaries:
+            course = Course.query.get(summary.course_id)
+            monthly_data.append({
+                'month': summary.month.strftime('%B %Y'),
+                'course_name': course.name if course else 'Unknown',
+                'total_classes': summary.total_classes,
+                'present': summary.present_count,
+                'absent': summary.absent_count,
+                'late': summary.late_count,
+                'percentage': round(summary.percentage, 2)
+            })
+        
+        return jsonify({
+            'success': True,
+            'monthly_data': monthly_data
+        }), 200
+    except Exception as e:
+        print(f"Error getting monthly attendance: {e}")
         return jsonify({'error': str(e)}), 500
