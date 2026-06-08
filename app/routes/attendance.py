@@ -5,6 +5,7 @@ from app.models.course import Course
 from app.models.attendance import Attendance, AttendanceSummary
 from app.utils.decorators import admin_required, student_required
 from datetime import datetime, timedelta
+import json
 
 # Change blueprint name to 'attendance_routes' to avoid conflict
 attendance_bp = Blueprint('attendance_routes', __name__)
@@ -62,7 +63,10 @@ def update_attendance_summary(student_id, course_id, date_obj):
     
     db.session.commit()
 
-@attendance_bp.route('/api/admin/attendance/courses', methods=['GET', 'OPTIONS'])
+# ✅ Routes with /api/ prefix removed (will be added by blueprint registration)
+# The blueprint will be registered with url_prefix='/api' or similar
+
+@attendance_bp.route('/admin/attendance/courses', methods=['GET', 'OPTIONS'])
 @admin_required
 def get_attendance_courses():
     """Get all courses for attendance marking"""
@@ -86,7 +90,8 @@ def get_attendance_courses():
         print(f"Error fetching courses: {e}")
         return jsonify({'error': str(e)}), 500
 
-@attendance_bp.route('/api/admin/attendance/courses/<int:course_id>/students', methods=['GET', 'OPTIONS'])
+
+@attendance_bp.route('/admin/attendance/courses/<int:course_id>/students', methods=['GET', 'OPTIONS'])
 @admin_required
 def get_course_students_for_attendance(course_id):
     if request.method == 'OPTIONS':
@@ -101,7 +106,6 @@ def get_course_students_for_attendance(course_id):
         for student in students:
             course_ids = student.course_ids or []
             if isinstance(course_ids, str):
-                import json
                 course_ids = json.loads(course_ids)
             
             if course_id in course_ids:
@@ -120,7 +124,8 @@ def get_course_students_for_attendance(course_id):
         print(f"Error fetching students: {e}")
         return jsonify({'error': str(e)}), 500
 
-@attendance_bp.route('/api/admin/attendance/course/<int:course_id>/date/<date_str>', methods=['GET', 'OPTIONS'])
+
+@attendance_bp.route('/admin/attendance/course/<int:course_id>/date/<date_str>', methods=['GET', 'OPTIONS'])
 @admin_required
 def get_attendance_by_date(course_id, date_str):
     if request.method == 'OPTIONS':
@@ -147,7 +152,8 @@ def get_attendance_by_date(course_id, date_str):
         print(f"Error getting attendance: {e}")
         return jsonify({'error': str(e)}), 500
 
-@attendance_bp.route('/api/admin/attendance/mark', methods=['POST', 'OPTIONS'])
+
+@attendance_bp.route('/admin/attendance/mark', methods=['POST', 'OPTIONS'])
 @admin_required
 def mark_attendance():
     if request.method == 'OPTIONS':
@@ -234,7 +240,8 @@ def mark_attendance():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-@attendance_bp.route('/api/admin/attendance/summary/<int:course_id>', methods=['GET', 'OPTIONS'])
+
+@attendance_bp.route('/admin/attendance/summary/<int:course_id>', methods=['GET', 'OPTIONS'])
 @admin_required
 def get_attendance_summary(course_id):
     if request.method == 'OPTIONS':
@@ -248,7 +255,6 @@ def get_attendance_summary(course_id):
         for student in students:
             course_ids = student.course_ids or []
             if isinstance(course_ids, str):
-                import json
                 course_ids = json.loads(course_ids)
             
             if course_id in course_ids:
@@ -276,7 +282,8 @@ def get_attendance_summary(course_id):
         print(f"Error getting summary: {e}")
         return jsonify({'error': str(e)}), 500
 
-@attendance_bp.route('/api/student/attendance/my-attendance', methods=['GET', 'OPTIONS'])
+
+@attendance_bp.route('/student/attendance/my-attendance', methods=['GET', 'OPTIONS'])
 @student_required
 def get_my_attendance():
     if request.method == 'OPTIONS':
@@ -326,7 +333,8 @@ def get_my_attendance():
         print(f"Error getting my attendance: {e}")
         return jsonify({'error': str(e)}), 500
 
-@attendance_bp.route('/api/student/attendance/monthly', methods=['GET', 'OPTIONS'])
+
+@attendance_bp.route('/student/attendance/monthly', methods=['GET', 'OPTIONS'])
 @student_required
 def get_monthly_attendance():
     if request.method == 'OPTIONS':
