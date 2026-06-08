@@ -46,7 +46,8 @@ def get_user_profile():
     except Exception as e:
         print(f"Error in get_user_profile: {e}")
         return jsonify({'error': str(e)}), 500
-    
+
+
 @user_bp.route('/activity-log', methods=['GET', 'OPTIONS'])
 @token_required
 def get_activity_log():
@@ -66,7 +67,8 @@ def get_activity_log():
         }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-    
+
+
 @user_bp.route('/notification-preferences', methods=['PUT', 'OPTIONS'])
 @token_required
 def update_notification_preferences():
@@ -96,6 +98,7 @@ def update_notification_preferences():
         db.session.rollback()
         print(f"Error in update_notification_preferences: {e}")
         return jsonify({'error': str(e)}), 500
+
 
 @user_bp.route('/my-courses', methods=['GET', 'OPTIONS'])
 @token_required
@@ -158,6 +161,7 @@ def get_my_courses():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
 
 @user_bp.route('/update-profile', methods=['PUT', 'OPTIONS'])
 @token_required
@@ -228,6 +232,7 @@ def update_user_profile():
         print(f"Error in update_user_profile: {e}")
         return jsonify({'error': str(e)}), 500
 
+
 @user_bp.route('/refresh-courses', methods=['GET', 'OPTIONS'])
 @token_required
 def refresh_courses():
@@ -275,13 +280,15 @@ def refresh_courses():
     except Exception as e:
         print(f"Error refreshing courses: {e}")
         return jsonify({'error': str(e)}), 500
-    
-# In app/routes/user.py
 
-@user_bp.route('/enrolled-courses', methods=['GET'])
+
+@user_bp.route('/enrolled-courses', methods=['GET', 'OPTIONS'])
 @token_required
 def get_enrolled_courses():
     """Get all enrolled courses for the current student"""
+    if request.method == 'OPTIONS':
+        return '', 200
+    
     try:
         user = request.user
         student = Student.query.get(user['id'])
@@ -347,12 +354,15 @@ def get_enrolled_courses():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e), 'courses': []}), 500
-    
-    
-@user_bp.route('/my-internships', methods=['GET'])
+
+
+@user_bp.route('/my-internships', methods=['GET', 'OPTIONS'])
 @token_required
 def get_my_internships():
     """Get all internships the student is enrolled in"""
+    if request.method == 'OPTIONS':
+        return '', 200
+    
     try:
         user = request.user
         student = Student.query.get(user['id'])
@@ -362,7 +372,7 @@ def get_my_internships():
         
         internships = []
         
-        # ✅ Get from internship_ids JSON field
+        # Get from internship_ids JSON field
         if student.internship_ids and len(student.internship_ids) > 0:
             from app.models.internship import Internship
             for internship_id in student.internship_ids:
@@ -380,7 +390,7 @@ def get_my_internships():
                         'enrolled_at': datetime.utcnow().isoformat()
                     })
         
-        # ✅ Also get from InternshipOrder table for completed payments
+        # Also get from InternshipOrder table for completed payments
         from app.models.internship import InternshipOrder
         orders = InternshipOrder.query.filter_by(
             student_id=student.id,
