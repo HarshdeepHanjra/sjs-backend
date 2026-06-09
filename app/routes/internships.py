@@ -1,4 +1,5 @@
 import os
+from unittest import result
 
 from flask import Blueprint, request, jsonify
 from app import db
@@ -9,6 +10,7 @@ from app.utils.helpers import generate_order_id, generate_verification_id
 from app.utils.decorators import token_required, admin_required
 from datetime import datetime
 from werkzeug.utils import secure_filename
+import cloudinary.uploader
 
 internships_bp = Blueprint('internships', __name__)
 
@@ -231,16 +233,14 @@ def upload_internship_screenshot():
         timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
         filename = f"{order_id}_{timestamp}_{original_filename}"
         
-        upload_dir = os.path.join('uploads', 'screenshots')
-        os.makedirs(upload_dir, exist_ok=True)
-        
-        filepath = os.path.join(upload_dir, filename)
-        file.save(filepath)
-        
-        print(f"✅ Internship screenshot saved to: {filepath}")
-        print(f"   File size: {os.path.getsize(filepath)} bytes")
-        
-        screenshot_url = f"/uploads/screenshots/{filename}"
+        result = cloudinary.uploader.upload(
+            file,
+            folder="internship_screenshots"
+        )
+
+        screenshot_url = result["secure_url"]
+
+        print(f"Cloudinary URL: {screenshot_url}")
         
         internship_order = InternshipOrder.query.filter_by(order_id=order_id).first()
         if internship_order:
