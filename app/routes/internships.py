@@ -27,6 +27,7 @@ def test_internship_route():
 
 
 # ✅ FIXED: Remove duplicate /internships/ - route will be /api/internships
+@internships_bp.route('', methods=['GET', 'OPTIONS'])
 @internships_bp.route('/', methods=['GET', 'OPTIONS'])
 def get_internships():
     if request.method == 'OPTIONS':
