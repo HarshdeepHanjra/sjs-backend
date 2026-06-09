@@ -21,6 +21,10 @@ def token_required(f):
     """Decorator to protect routes that require authentication"""
     @wraps(f)
     def decorated(*args, **kwargs):
+        
+        if request.method == 'OPTIONS':
+            return '', 200
+        
         auth_header = request.headers.get('Authorization')
         
         if not auth_header:
@@ -44,6 +48,10 @@ def admin_required(f):
     """Decorator to protect routes that require admin access"""
     @wraps(f)
     def decorated(*args, **kwargs):
+        
+        if request.method == 'OPTIONS':
+            return '', 200
+        
         auth_header = request.headers.get('Authorization')
         
         if not auth_header:
@@ -71,6 +79,9 @@ def student_required(f):
     """Decorator to protect routes that require student access"""
     @wraps(f)
     def decorated(*args, **kwargs):
+        if request.method == 'OPTIONS':
+            return '', 200
+        
         auth_header = request.headers.get('Authorization')
         
         if not auth_header:
@@ -99,6 +110,9 @@ def role_required(allowed_roles):
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
+            if request.method == 'OPTIONS':
+                return '', 200
+            
             auth_header = request.headers.get('Authorization')
             
             if not auth_header:
