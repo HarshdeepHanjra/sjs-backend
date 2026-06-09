@@ -150,7 +150,7 @@ def send_contact_email():
             body=f"Thank you for contacting us, {name}!\n\nWe have received your message and will get back to you within 24 hours.\n\nYour message:\n{message}\n\nBest regards,\nSJS Global Tech Academy Team"
         )
         
-        mail.send(auto_reply)
+        # mail.send(auto_reply)
         
         return jsonify({
             'success': True,
