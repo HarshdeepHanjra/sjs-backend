@@ -33,6 +33,7 @@ def add_cors_headers(response):
 
 
 @cart_bp.route('/create-order', methods=['POST', 'OPTIONS'])
+@cart_bp.route('/create-order/', methods=['POST', 'OPTIONS'])
 @token_required
 def create_order():
     if request.method == 'OPTIONS':
@@ -93,6 +94,7 @@ def create_order():
 
 
 @cart_bp.route('/my-courses', methods=['OPTIONS', 'GET'])
+@cart_bp.route('/my-courses/', methods=['OPTIONS', 'GET'])
 @token_required
 def get_my_courses():
     """Get all enrolled courses for the current student"""
@@ -146,6 +148,7 @@ def get_my_courses():
 
 
 @cart_bp.route('/latest-prices', methods=['OPTIONS', 'GET'])
+@cart_bp.route('/latest-prices/', methods=['OPTIONS', 'GET'])
 @token_required
 def get_latest_prices():
     """Get latest prices for courses in cart"""
@@ -178,6 +181,7 @@ def get_latest_prices():
 
 
 @cart_bp.route('/verify-payment', methods=['POST', 'OPTIONS'])
+@cart_bp.route('/verify-payment/', methods=['POST', 'OPTIONS'])
 @token_required
 def verify_payment():
     """Verify payment (for instant access)"""
