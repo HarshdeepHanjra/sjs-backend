@@ -28,7 +28,7 @@
 #     cloudinary.config(
 #         cloud_name=os.getenv('CLOUDINARY_CLOUD_NAME', 'dxxpeilta'),
 #         api_key=os.getenv('CLOUDINARY_API_KEY', '375175513582196'),
-#         api_secret=os.getenv('CLOUDINARY_API_SECRET', '48p-JTyxEEylHjS2733gA6KeTbU'),
+#         api_secret=os.getenv('CLOUDINARY_API_SECRET'),
 #         secure=True
 #     )
 #     print("✅ Cloudinary configured successfully!")
@@ -61,7 +61,7 @@
 #     app.config['MAIL_USE_TLS'] = True
 #     app.config['MAIL_USE_SSL'] = False
 #     app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME', 'sjsglobaltech@gmail.com')
-#     app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD', 'oijb jpqd ivgc upbt')
+#     app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
 #     app.config['MAIL_DEFAULT_SENDER'] = ('SJS Academy', 'noreply@sjsacademy.com')
 #     app.config['MAIL_SUPPRESS_SEND'] = os.getenv('MAIL_SUPPRESS_SEND', 'False').lower() == 'true'
     
@@ -220,7 +220,7 @@ def create_app():
     cloudinary.config(
         cloud_name=os.getenv('CLOUDINARY_CLOUD_NAME', 'dxxpeilta'),
         api_key=os.getenv('CLOUDINARY_API_KEY', '375175513582196'),
-        api_secret=os.getenv('CLOUDINARY_API_SECRET', '48p-JTyxEEylHjS2733gA6KeTbU'),
+        api_secret=os.getenv('CLOUDINARY_API_SECRET'),
         secure=True
     )
     print("✅ Cloudinary configured successfully!")
@@ -253,7 +253,7 @@ def create_app():
     app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', 'True').lower() == 'true'
     app.config['MAIL_USE_SSL'] = os.getenv('MAIL_USE_SSL', 'False').lower() == 'true'
     app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME', 'sjsglobaltech@gmail.com')
-    app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD', 'oijb jpqd ivgc upbt')
+    app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
     app.config['MAIL_DEFAULT_SENDER'] = app.config['MAIL_USERNAME']
     app.config['MAIL_SUPPRESS_SEND'] = os.getenv('MAIL_SUPPRESS_SEND', 'False').lower() == 'true'
     

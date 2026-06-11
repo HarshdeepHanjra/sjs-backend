@@ -17,7 +17,7 @@ payments_bp = Blueprint('payments', __name__)
 # Cloudinary configuration
 CLOUDINARY_CLOUD_NAME = os.getenv('CLOUDINARY_CLOUD_NAME', 'dxxpeilta')
 CLOUDINARY_API_KEY = os.getenv('CLOUDINARY_API_KEY', '375175513582196')
-CLOUDINARY_API_SECRET = os.getenv('CLOUDINARY_API_SECRET', '48p-JTyxEEylHjS2733gA6KeTbU')
+CLOUDINARY_API_SECRET = os.getenv('CLOUDINARY_API_SECRET')
 
 def init_cloudinary():
     """Initialize Cloudinary if credentials are available"""
