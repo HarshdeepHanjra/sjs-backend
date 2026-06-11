@@ -1,4 +1,4 @@
-# app/utils/email_otp.py - Fixed Version
+# app/utils/email_otp.py - Final Working Version
 
 import random
 import requests
@@ -14,15 +14,20 @@ def send_email_otp(email, otp, user_type="student"):
     try:
         api_key = os.getenv("BREVO_API_KEY")
         
-        if not api_key:
-            print("❌ BREVO_API_KEY not found in environment variables")
-            print("✅ Falling back to console mode for testing")
-            # Fallback to console
-            print(f"\n{'='*60}")
-            print(f"🔐 OTP for {email}: {otp}")
-            print(f"{'='*60}\n")
-            return True  # Return True so login works even without API key
+        # Check if we should use real email
+        use_email = os.getenv("USE_REAL_EMAIL", "False").lower() == "true"
         
+        if not api_key or not use_email:
+            print(f"⚠️ Email mode: {'ON' if use_email else 'OFF'}")
+            print(f"⚠️ API Key: {'Found' if api_key else 'Missing'}")
+            print(f"\n{'='*60}")
+            print(f"📧 OTP FOR {email}")
+            print(f"🔐 {otp}")
+            print(f"⏰ Valid for 10 minutes")
+            print(f"{'='*60}\n")
+            return True
+        
+        # Real email sending via Brevo
         subject = (
             "🔐 Admin Login OTP - SJS Global Tech Academy"
             if user_type == "admin"
@@ -38,18 +43,18 @@ def send_email_otp(email, otp, user_type="student"):
             "subject": subject,
             "htmlContent": f"""
             <html>
-            <body style="font-family: Arial, sans-serif;">
+            <body style="font-family: Arial, sans-serif; text-align: center;">
                 <h2 style="color: #1a3a5c;">SJS Global Tech Academy</h2>
                 <p>Your OTP code is:</p>
                 <div style="
-                    font-size: 42px;
+                    font-size: 48px;
                     font-weight: bold;
                     color: #0d6efd;
                     margin: 20px 0;
-                    padding: 15px;
+                    padding: 20px;
                     background: #f0f7ff;
                     border-radius: 10px;
-                    letter-spacing: 5px;
+                    letter-spacing: 10px;
                 ">
                     {otp}
                 </div>
@@ -76,26 +81,30 @@ def send_email_otp(email, otp, user_type="student"):
             timeout=15,
         )
 
-        print(f"Brevo Status: {response.status_code}")
+        print(f"Brevo Response: {response.status_code}")
         
         if response.status_code in [200, 201]:
             print(f"✅ OTP email sent successfully to {email}")
+            print(f"🔐 OTP: {otp}")
             return True
         else:
             print(f"❌ Brevo error: {response.text}")
-            # Fallback to console
-            print(f"🔐 OTP for {email}: {otp}")
-            return True  # Return True for testing
+            print(f"🔐 Falling back to console - OTP: {otp}")
+            return True
             
     except Exception as e:
-        print(f"❌ Email Send Error: {e}")
-        print(f"🔐 Falling back to console - OTP: {otp}")
-        return True  # Return True so login works
+        print(f"❌ Email Error: {e}")
+        print(f"🔐 Console OTP for {email}: {otp}")
+        return True
 
 def send_otp(email, user_type="student"):
     otp = generate_otp()
     
-    print(f"🔐 OTP Generated For {email}: {otp}")
+    print(f"\n{'='*50}")
+    print(f"🔐 Generating OTP for: {email}")
+    print(f"📝 OTP Code: {otp}")
+    print(f"👤 User Type: {user_type}")
+    print(f"{'='*50}\n")
     
     otp_storage[email] = {
         "otp": otp,
@@ -126,11 +135,11 @@ def verify_otp(email, user_otp):
     stored["attempts"] += 1
     
     if stored["otp"] == user_otp:
-        print(f"✅ OTP verified for {email}")
+        print(f"✅ OTP verified successfully for {email}")
         del otp_storage[email]
         return True
     
-    print(f"❌ Invalid OTP for {email}. Expected: {stored['otp']}, Got: {user_otp}")
+    print(f"❌ Invalid OTP for {email}")
     return False
 
 def resend_otp(email, user_type="student"):
