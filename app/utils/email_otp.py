@@ -1,4 +1,4 @@
-# app/utils/email_otp.py - Updated
+# app/utils/email_otp.py - Full Debug Version
 
 import random
 import requests
@@ -11,27 +11,39 @@ def generate_otp():
     return "".join(str(random.randint(0, 9)) for _ in range(6))
 
 def send_email_otp(email, otp, user_type="student"):
+    print("\n" + "="*60)
+    print("🔍 SEND_EMAIL_OTP FUNCTION STARTED")
+    print("="*60)
+    
+    # Debug: Check API Key
+    api_key = os.getenv("BREVO_API_KEY")
+    print(f"1️⃣ BREVO_API_KEY from env: {api_key}")
+    print(f"1️⃣ API Key exists: {api_key is not None}")
+    if api_key:
+        print(f"1️⃣ API Key length: {len(api_key)}")
+        print(f"1️⃣ API Key first 15 chars: {api_key[:15]}...")
+    
+    # Debug: Check USE_REAL_EMAIL
+    use_real_email = os.getenv("USE_REAL_EMAIL", "False")
+    print(f"2️⃣ USE_REAL_EMAIL from env: {use_real_email}")
+    
+    # Convert to boolean
+    send_real_email = use_real_email.lower() == "true"
+    print(f"3️⃣ Send real email: {send_real_email}")
+    
+    if not send_real_email:
+        print("4️⃣ REAL EMAIL MODE: OFF - Using console mode")
+        print(f"📧 OTP FOR {email}: {otp}")
+        return True
+    
+    if not api_key:
+        print("❌ BREVO_API_KEY is missing or empty!")
+        print(f"5️⃣ API key value: '{api_key}'")
+        return False
+    
+    print("6️⃣ Attempting to send real email via Brevo...")
+    
     try:
-        api_key = os.getenv("BREVO_API_KEY")
-        
-        # Debug: Check if API key exists
-        print(f"🔍 DEBUG: BREVO_API_KEY exists: {'Yes' if api_key else 'No'}")
-        if api_key:
-            print(f"🔍 DEBUG: API Key starts with: {api_key[:15]}...")
-        
-        use_email = os.getenv("USE_REAL_EMAIL", "False").lower() == "true"
-        
-        if not api_key or not use_email:
-            print(f"⚠️ Email mode: {'ON' if use_email else 'OFF'}")
-            print(f"⚠️ API Key: {'Found' if api_key else 'Missing'}")
-            print(f"\n{'='*60}")
-            print(f"📧 OTP FOR {email}")
-            print(f"🔐 {otp}")
-            print(f"⏰ Valid for 10 minutes")
-            print(f"{'='*60}\n")
-            return True
-        
-        # Try sending real email
         subject = (
             "🔐 Admin Login OTP - SJS Global Tech Academy"
             if user_type == "admin"
@@ -45,30 +57,7 @@ def send_email_otp(email, otp, user_type="student"):
             },
             "to": [{"email": email}],
             "subject": subject,
-            "htmlContent": f"""
-            <html>
-            <body style="font-family: Arial, sans-serif; text-align: center;">
-                <h2 style="color: #1a3a5c;">SJS Global Tech Academy</h2>
-                <p>Your OTP code is:</p>
-                <div style="
-                    font-size: 48px;
-                    font-weight: bold;
-                    color: #0d6efd;
-                    margin: 20px 0;
-                    padding: 20px;
-                    background: #f0f7ff;
-                    border-radius: 10px;
-                    letter-spacing: 10px;
-                ">
-                    {otp}
-                </div>
-                <p>This OTP is valid for <b>10 minutes</b>.</p>
-                <p style="color: #ff6b6b;">⚠️ Never share this OTP with anyone.</p>
-                <hr>
-                <p style="color: #666;">SJS Global Tech Academy</p>
-            </body>
-            </html>
-            """,
+            "htmlContent": f"<html><body><h1>Your OTP is: {otp}</h1><p>Valid for 10 minutes.</p></body></html>",
         }
 
         headers = {
@@ -77,7 +66,11 @@ def send_email_otp(email, otp, user_type="student"):
             "content-type": "application/json",
         }
 
-        print(f"📧 Sending OTP to {email} via Brevo...")
+        print(f"7️⃣ Sending request to Brevo API...")
+        print(f"7️⃣ URL: https://api.brevo.com/v3/smtp/email")
+        print(f"7️⃣ To: {email}")
+        print(f"7️⃣ Subject: {subject}")
+        
         response = requests.post(
             "https://api.brevo.com/v3/smtp/email",
             json=payload,
@@ -85,21 +78,27 @@ def send_email_otp(email, otp, user_type="student"):
             timeout=15,
         )
 
-        print(f"Brevo Response: {response.status_code}")
+        print(f"8️⃣ Brevo Response Status Code: {response.status_code}")
+        print(f"8️⃣ Brevo Response Body: {response.text}")
         
         if response.status_code in [200, 201]:
-            print(f"✅ OTP email sent successfully to {email}")
-            print(f"🔐 OTP: {otp}")
+            print(f"✅ Email sent successfully to {email}")
             return True
         else:
-            print(f"❌ Brevo error: {response.text}")
-            print(f"🔐 Console OTP for {email}: {otp}")
-            return True
+            print(f"❌ Brevo API error: {response.status_code} - {response.text}")
+            return False
             
+    except requests.exceptions.Timeout:
+        print("❌ Request timeout - Brevo not responding")
+        return False
+    except requests.exceptions.ConnectionError as e:
+        print(f"❌ Connection error: {e}")
+        return False
     except Exception as e:
-        print(f"❌ Email Error: {e}")
-        print(f"🔐 Console OTP for {email}: {otp}")
-        return True
+        print(f"❌ Unexpected error: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 def send_otp(email, user_type="student"):
     otp = generate_otp()
@@ -139,7 +138,7 @@ def verify_otp(email, user_otp):
     stored["attempts"] += 1
     
     if stored["otp"] == user_otp:
-        print(f"✅ OTP verified successfully for {email}")
+        print(f"✅ OTP verified for {email}")
         del otp_storage[email]
         return True
     
