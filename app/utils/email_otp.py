@@ -5,6 +5,7 @@ from flask_mail import Message
 from flask import current_app
 from threading import Thread
 from app import mail
+import traceback
 
 # Store OTPs temporarily
 otp_storage = {}
@@ -110,13 +111,18 @@ def send_email_otp(email, otp, user_type='student'):
             html=html_content
         )
         
+        print(f"📧 Sending OTP email to: {email}")
+        print(f"📧 Subject: {subject}")
+        
         mail.send(msg)
 
         print(f"✅ OTP Email Sent Successfully To: {email}")
 
         return True
     except Exception as e:
-        print(f"Failed to send OTP: {e}")
+        print("❌ EMAIL ERROR")
+        print(str(e))
+        traceback.print_exc()
         return False
 
 def send_otp(email, user_type='student'):
