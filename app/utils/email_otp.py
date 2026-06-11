@@ -1,4 +1,4 @@
-# app/utils/email_otp.py - Final Working Version
+# app/utils/email_otp.py - Updated
 
 import random
 import requests
@@ -14,7 +14,11 @@ def send_email_otp(email, otp, user_type="student"):
     try:
         api_key = os.getenv("BREVO_API_KEY")
         
-        # Check if we should use real email
+        # Debug: Check if API key exists
+        print(f"🔍 DEBUG: BREVO_API_KEY exists: {'Yes' if api_key else 'No'}")
+        if api_key:
+            print(f"🔍 DEBUG: API Key starts with: {api_key[:15]}...")
+        
         use_email = os.getenv("USE_REAL_EMAIL", "False").lower() == "true"
         
         if not api_key or not use_email:
@@ -27,7 +31,7 @@ def send_email_otp(email, otp, user_type="student"):
             print(f"{'='*60}\n")
             return True
         
-        # Real email sending via Brevo
+        # Try sending real email
         subject = (
             "🔐 Admin Login OTP - SJS Global Tech Academy"
             if user_type == "admin"
@@ -89,7 +93,7 @@ def send_email_otp(email, otp, user_type="student"):
             return True
         else:
             print(f"❌ Brevo error: {response.text}")
-            print(f"🔐 Falling back to console - OTP: {otp}")
+            print(f"🔐 Console OTP for {email}: {otp}")
             return True
             
     except Exception as e:
