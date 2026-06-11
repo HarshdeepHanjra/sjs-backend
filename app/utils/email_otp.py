@@ -1,128 +1,133 @@
 # app/utils/email_otp.py
-import random
-from datetime import datetime, timedelta
-from flask_mail import Message
-from flask import current_app
-from threading import Thread
-import traceback
-import os
-from app import mail
 
-# Store OTPs temporarily
+import random
+import requests
+import os
+from datetime import datetime, timedelta
+
 otp_storage = {}
 
 def generate_otp():
-    """Generate 6-digit OTP"""
-    return ''.join([str(random.randint(0, 9)) for _ in range(6)])
+    return ''.join(str(random.randint(0, 9)) for _ in range(6))
 
-def send_async_email(app, msg):
-    """Send email asynchronously - NO BLOCKING"""
-    try:
-        with app.app_context():
-            # Set timeout for email sending
-            import socket
-            socket.setdefaulttimeout(10)  # 10 second timeout
-            mail.send(msg)
-            print(f"✅ Email sent successfully via async thread")
-    except Exception as e:
-        print(f"❌ Async email failed: {e}")
 
 def send_email_otp(email, otp, user_type='student'):
-    """Send OTP via Email - NON BLOCKING"""
     try:
-        if user_type == 'admin':
-            subject = "🔐 Admin Login OTP - SJS Global Tech Academy"
-        else:
-            subject = "🔐 Email Verification OTP - SJS Global Tech Academy"
-        
-        # Simple text email first (faster)
-        text_content = f"""
-SJS GLOBAL TECH ACADEMY
-{'='*40}
+        api_key = os.getenv("BREVO_API_KEY")
 
-Your OTP for login is: {otp}
+        if not api_key:
+            print("❌ BREVO_API_KEY not found")
+            return False
 
-This OTP is valid for 10 minutes.
-
-⚠️ Never share this OTP with anyone.
-
-{'='*40}
-SJS Global Tech Academy
-"""
-        
-        msg = Message(
-            subject=subject,
-            recipients=[email],
-            body=text_content  # Use plain text for speed
+        subject = (
+            "🔐 Admin Login OTP - SJS Global Tech Academy"
+            if user_type == "admin"
+            else "🔐 Email Verification OTP - SJS Global Tech Academy"
         )
-        
-        print(f"📧 Sending OTP to: {email}")
-        
-        # Send asynchronously - NON BLOCKING
-        from app import create_app
-        app = current_app._get_current_object()
 
-        thread = Thread(
-            target=send_async_email,
-            args=(app, msg),
-            daemon=True
+        payload = {
+            "sender": {
+                "name": "SJS Global Tech Academy",
+                "email": "sjsglobaltech@gmail.com"
+            },
+            "to": [
+                {
+                    "email": email
+                }
+            ],
+            "subject": subject,
+            "htmlContent": f"""
+            <html>
+            <body style="font-family: Arial, sans-serif;">
+                <h2>SJS Global Tech Academy</h2>
+
+                <p>Your OTP code is:</p>
+
+                <div style="
+                    font-size:32px;
+                    font-weight:bold;
+                    color:#0d6efd;
+                    margin:20px 0;
+                ">
+                    {otp}
+                </div>
+
+                <p>This OTP is valid for <b>10 minutes</b>.</p>
+
+                <p>⚠️ Never share this OTP with anyone.</p>
+
+                <hr>
+
+                <p>SJS Global Tech Academy</p>
+            </body>
+            </html>
+            """
+        }
+
+        headers = {
+            "accept": "application/json",
+            "api-key": api_key,
+            "content-type": "application/json"
+        }
+
+        response = requests.post(
+            "https://api.brevo.com/v3/smtp/email",
+            json=payload,
+            headers=headers,
+            timeout=15
         )
-        thread.daemon = True  # Thread will exit when main thread exits
-        thread.start()
-        
-        print(f"✅ OTP email queued for: {email}")
-        return True
-        
+
+        print("Brevo Status:", response.status_code)
+        print("Brevo Response:", response.text)
+
+        return response.status_code in [200, 201]
+
     except Exception as e:
-        print(f"❌ Failed to queue OTP email: {e}")
-        traceback.print_exc()
+        print(f"❌ Email Send Error: {e}")
         return False
+
 
 def send_otp(email, user_type='student'):
-    """Generate and send OTP"""
     otp = generate_otp()
-    
+
     print(f"🔐 OTP Generated For {email}: {otp}")
-    
+
     otp_storage[email] = {
-        'otp': otp,
-        'expires_at': datetime.utcnow() + timedelta(minutes=10),
-        'attempts': 0
+        "otp": otp,
+        "expires_at": datetime.utcnow() + timedelta(minutes=10),
+        "attempts": 0
     }
-    
+
     success = send_email_otp(email, otp, user_type)
+
     return success, otp
 
+
 def verify_otp(email, user_otp):
-    """Verify OTP"""
     if email not in otp_storage:
-        print(f"❌ No OTP found for: {email}")
         return False
-    
+
     stored = otp_storage[email]
-    
-    if stored['attempts'] >= 5:
-        print(f"❌ Too many attempts for: {email}")
+
+    if stored["attempts"] >= 5:
         del otp_storage[email]
         return False
-    
-    if datetime.utcnow() > stored['expires_at']:
-        print(f"❌ OTP expired for: {email}")
+
+    if datetime.utcnow() > stored["expires_at"]:
         del otp_storage[email]
         return False
-    
-    stored['attempts'] += 1
-    
-    if stored['otp'] == user_otp:
-        print(f"✅ OTP verified for: {email}")
+
+    stored["attempts"] += 1
+
+    if stored["otp"] == user_otp:
         del otp_storage[email]
         return True
-    
-    print(f"❌ Invalid OTP for: {email}. Expected: {stored['otp']}, Got: {user_otp}")
+
     return False
 
+
 def resend_otp(email, user_type='student'):
-    """Resend OTP"""
     if email in otp_storage:
         del otp_storage[email]
+
     return send_otp(email, user_type)
