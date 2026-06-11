@@ -932,6 +932,10 @@ def student_register():
 # STUDENT LOGIN (WITH OTP)
 # =====================================================
 
+# =====================================================
+# STUDENT LOGIN (WITH OTP)
+# =====================================================
+
 @auth_bp.route('/student/login', methods=['POST', 'OPTIONS'])
 def student_login():
     if request.method == 'OPTIONS':
@@ -1001,6 +1005,9 @@ def student_login():
             if verify_otp(session_data['email'], otp):
                 del current_app.login_sessions[session_id]
                 
+                # FIX: Use JWT_SECRET_KEY directly from config
+                jwt_secret = current_app.config.get('JWT_SECRET_KEY', os.getenv('JWT_SECRET_KEY', 'sjs-academy-secret-key-2024'))
+                
                 token = jwt.encode(
                     {
                         'id': student.id, 
@@ -1010,7 +1017,7 @@ def student_login():
                         'student_id': student.student_id, 
                         'exp': datetime.utcnow() + timedelta(days=30)
                     },
-                    current_app.config['JWT_SECRET_KEY'], 
+                    jwt_secret, 
                     algorithm='HS256'
                 )
                 
@@ -1096,6 +1103,9 @@ def admin_login():
                 if verify_otp(session_data['email'], otp):
                     del current_app.login_sessions[session_id]
                     
+                    # FIX: Use JWT_SECRET_KEY directly from config
+                    jwt_secret = current_app.config.get('JWT_SECRET_KEY', os.getenv('JWT_SECRET_KEY', 'sjs-academy-secret-key-2024'))
+                    
                     token = jwt.encode(
                         {
                             'id': 1, 
@@ -1104,7 +1114,7 @@ def admin_login():
                             'is_admin': True,
                             'exp': datetime.utcnow() + timedelta(days=30)
                         },
-                        current_app.config['JWT_SECRET_KEY'], 
+                        jwt_secret, 
                         algorithm='HS256'
                     )
                     
