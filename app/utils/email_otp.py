@@ -60,8 +60,13 @@ SJS Global Tech Academy
         
         # Send asynchronously - NON BLOCKING
         from app import create_app
-        app = create_app()
-        thread = Thread(target=send_async_email, args=(app, msg))
+        app = current_app._get_current_object()
+
+        thread = Thread(
+            target=send_async_email,
+            args=(app, msg),
+            daemon=True
+        )
         thread.daemon = True  # Thread will exit when main thread exits
         thread.start()
         

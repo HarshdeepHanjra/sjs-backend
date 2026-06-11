@@ -190,7 +190,7 @@
 #     return app
 
 
-from flask import Flask, app, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
@@ -255,8 +255,8 @@ def create_app():
     app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME', 'sjsglobaltech@gmail.com')
     app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD', 'oijb jpqd ivgc upbt')
     app.config['MAIL_DEFAULT_SENDER'] = (
-        'SJS Academy',
-        app.config['MAIL_USERNAME']
+        "SJS Academy",
+        "sjsglobaltech@gmail.com"
     )
     app.config['MAIL_SUPPRESS_SEND'] = os.getenv('MAIL_SUPPRESS_SEND', 'False').lower() == 'true'
     
