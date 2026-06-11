@@ -1,4 +1,6 @@
-from flask import Blueprint, request, jsonify
+import uuid
+
+from flask import Blueprint, current_app, request, jsonify
 from app import db, bcrypt
 from app.models.user import Student, Admin
 from app.utils.helpers import generate_student_id
@@ -7,6 +9,7 @@ import jwt
 from datetime import datetime, timedelta
 import os
 import secrets
+from app.utils.email_otp import resend_otp, send_otp, verify_otp, resend_otpp
 
 auth_bp = Blueprint('auth', __name__)
 JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'sjs-academy-jwt-secret-2024')
@@ -311,57 +314,139 @@ def student_register():
         return jsonify({'error': str(e)}), 500
 
 
+
+
 # =====================================================
 # STUDENT LOGIN
 # =====================================================
 
-@auth_bp.route('/student/login', methods=['POST', 'OPTIONS'])
-def student_login():
-    if request.method == 'OPTIONS':
-        return '', 200
+# @auth_bp.route('/student/login', methods=['POST', 'OPTIONS'])
+# def student_login():
+#     if request.method == 'OPTIONS':
+#         return '', 200
     
+#     try:
+#         data = request.get_json()
+#         email = data.get('email')
+#         password = data.get('password')
+        
+#         student = Student.query.filter_by(email=email).first()
+        
+#         if not student:
+#             return jsonify({'error': 'Invalid email or password'}), 401
+        
+#         # Check password based on available column
+#         password_valid = False
+#         if hasattr(student, 'password_hash') and student.password_hash:
+#             password_valid = bcrypt.check_password_hash(student.password_hash, password)
+#         elif hasattr(student, 'password') and student.password:
+#             password_valid = bcrypt.check_password_hash(student.password, password)
+        
+#         if not password_valid:
+#             return jsonify({'error': 'Invalid email or password'}), 401
+        
+#         token = jwt.encode(
+#             {'id': student.id, 'role': 'student', 'email': student.email, 'name': student.name, 
+#              'student_id': student.student_id, 'exp': datetime.utcnow() + timedelta(days=30)},
+#             JWT_SECRET_KEY, algorithm='HS256'
+#         )
+        
+#         return jsonify({
+#             'success': True,
+#             'access_token': token,
+#             'student': {
+#                 'id': student.id, 
+#                 'student_id': student.student_id, 
+#                 'name': student.name, 
+#                 'email': student.email, 
+#                 'phone': student.phone or ''
+#             }
+#         }), 200
+        
+#     except Exception as e:
+#         print(f"Student login error: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         return jsonify({'error': str(e)}), 500
+
+
+# Update student_login function (replace existing one)
+@auth_bp.route('/student/login', methods=['POST'])
+def student_login():
     try:
         data = request.get_json()
         email = data.get('email')
         password = data.get('password')
+        otp = data.get('otp')
+        session_id = data.get('session_id')
         
         student = Student.query.filter_by(email=email).first()
         
-        if not student:
+        if not student or not bcrypt.check_password_hash(student.password_hash, password):
             return jsonify({'error': 'Invalid email or password'}), 401
         
-        # Check password based on available column
-        password_valid = False
-        if hasattr(student, 'password_hash') and student.password_hash:
-            password_valid = bcrypt.check_password_hash(student.password_hash, password)
-        elif hasattr(student, 'password') and student.password:
-            password_valid = bcrypt.check_password_hash(student.password, password)
+        # First step - password verified, need OTP
+        if not otp and not session_id:
+            session_id = str(uuid.uuid4())
+            success, otp_code = send_otp(student.email, 'student')
+            
+            if success:
+                if not hasattr(current_app, 'login_sessions'):
+                    current_app.login_sessions = {}
+                
+                current_app.login_sessions[session_id] = {
+                    'user_id': student.id,
+                    'role': 'student',
+                    'email': student.email,
+                    'expires_at': datetime.utcnow() + timedelta(minutes=10)
+                }
+                
+                return jsonify({
+                    'requires_otp': True,
+                    'session_id': session_id,
+                    'message': f'OTP sent to {student.email}'
+                }), 200
+            else:
+                return jsonify({'error': 'Failed to send OTP'}), 500
         
-        if not password_valid:
-            return jsonify({'error': 'Invalid email or password'}), 401
-        
-        token = jwt.encode(
-            {'id': student.id, 'role': 'student', 'email': student.email, 'name': student.name, 
-             'student_id': student.student_id, 'exp': datetime.utcnow() + timedelta(days=30)},
-            JWT_SECRET_KEY, algorithm='HS256'
-        )
-        
-        return jsonify({
-            'success': True,
-            'access_token': token,
-            'student': {
-                'id': student.id, 
-                'student_id': student.student_id, 
-                'name': student.name, 
-                'email': student.email, 
-                'phone': student.phone or ''
-            }
-        }), 200
-        
+        # Second step - Verify OTP
+        elif otp and session_id:
+            if not hasattr(current_app, 'login_sessions') or session_id not in current_app.login_sessions:
+                return jsonify({'error': 'Session expired'}), 401
+            
+            session_data = current_app.login_sessions[session_id]
+            
+            if datetime.utcnow() > session_data['expires_at']:
+                del current_app.login_sessions[session_id]
+                return jsonify({'error': 'Session expired'}), 401
+            
+            if verify_otp(session_data['email'], otp):
+                del current_app.login_sessions[session_id]
+                
+                token = jwt.encode(
+                    {'id': student.id, 'role': 'student', 'email': student.email, 
+                     'name': student.name, 'student_id': student.student_id, 
+                     'exp': datetime.utcnow() + timedelta(days=30)},
+                    current_app.config['JWT_SECRET_KEY'], algorithm='HS256'
+                )
+                
+                return jsonify({
+                    'success': True,
+                    'access_token': token,
+                    'student': {
+                        'id': student.id, 
+                        'student_id': student.student_id, 
+                        'name': student.name, 
+                        'email': student.email
+                    }
+                }), 200
+            else:
+                return jsonify({'error': 'Invalid OTP'}), 401
+        else:
+            return jsonify({'error': 'Invalid request'}), 400
+            
     except Exception as e:
         print(f"Student login error: {e}")
-        import traceback
-        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
@@ -369,52 +454,126 @@ def student_login():
 # ADMIN LOGIN
 # =====================================================
 
-@auth_bp.route('/admin/login', methods=['POST', 'OPTIONS'])
-def admin_login():
-    if request.method == 'OPTIONS':
-        return '', 200
+# @auth_bp.route('/admin/login', methods=['POST', 'OPTIONS'])
+# def admin_login():
+#     if request.method == 'OPTIONS':
+#         return '', 200
     
+#     try:
+#         email = request.json.get('email')
+#         password = request.json.get('password')
+        
+#         # Check for default admin
+#         if email == 'admin@sjsacademy.com' and password == 'Admin@123':
+#             token = jwt.encode(
+#                 {'id': 1, 'role': 'admin', 'email': email, 'is_admin': True, 
+#                  'exp': datetime.utcnow() + timedelta(days=30)},
+#                 JWT_SECRET_KEY, algorithm='HS256'
+#             )
+#             return jsonify({
+#                 'success': True,
+#                 'access_token': token,
+#                 'admin': {'id': 1, 'username': 'admin', 'email': email, 
+#                          'full_name': 'Super Admin', 'role': 'super'}
+#             }), 200
+        
+#         # Check database admin
+#         admin = Admin.query.filter_by(email=email).first()
+#         if admin:
+#             # Check password
+#             if hasattr(admin, 'password_hash') and admin.password_hash:
+#                 if bcrypt.check_password_hash(admin.password_hash, password):
+#                     token = jwt.encode(
+#                         {'id': admin.id, 'role': 'admin', 'email': admin.email,
+#                          'exp': datetime.utcnow() + timedelta(days=30)},
+#                         JWT_SECRET_KEY, algorithm='HS256'
+#                     )
+#                     return jsonify({
+#                         'success': True,
+#                         'access_token': token,
+#                         'admin': {'id': admin.id, 'username': admin.username, 'email': admin.email}
+#                     }), 200
+        
+#         return jsonify({'error': 'Invalid credentials'}), 401
+        
+#     except Exception as e:
+#         print(f"Admin login error: {e}")
+#         return jsonify({'error': str(e)}), 500
+
+@auth_bp.route('/admin/login', methods=['POST'])
+def admin_login():
     try:
-        email = request.json.get('email')
-        password = request.json.get('password')
+        data = request.get_json()
+        email = data.get('email')
+        password = data.get('password')
+        otp = data.get('otp')
+        session_id = data.get('session_id')
         
-        # Check for default admin
+        ADMIN_EMAIL = "harshdeephanjra22@gmail.com"
+        
         if email == 'admin@sjsacademy.com' and password == 'Admin@123':
-            token = jwt.encode(
-                {'id': 1, 'role': 'admin', 'email': email, 'is_admin': True, 
-                 'exp': datetime.utcnow() + timedelta(days=30)},
-                JWT_SECRET_KEY, algorithm='HS256'
-            )
-            return jsonify({
-                'success': True,
-                'access_token': token,
-                'admin': {'id': 1, 'username': 'admin', 'email': email, 
-                         'full_name': 'Super Admin', 'role': 'super'}
-            }), 200
-        
-        # Check database admin
-        admin = Admin.query.filter_by(email=email).first()
-        if admin:
-            # Check password
-            if hasattr(admin, 'password_hash') and admin.password_hash:
-                if bcrypt.check_password_hash(admin.password_hash, password):
+            
+            if not otp and not session_id:
+                session_id = str(uuid.uuid4())
+                success, otp_code = send_otp(ADMIN_EMAIL, 'admin')
+                
+                if success:
+                    if not hasattr(current_app, 'login_sessions'):
+                        current_app.login_sessions = {}
+                    
+                    current_app.login_sessions[session_id] = {
+                        'user_id': 1,
+                        'role': 'admin',
+                        'email': ADMIN_EMAIL,
+                        'expires_at': datetime.utcnow() + timedelta(minutes=10)
+                    }
+                    
+                    return jsonify({
+                        'requires_otp': True,
+                        'session_id': session_id,
+                        'message': f'OTP sent to {ADMIN_EMAIL}'
+                    }), 200
+                else:
+                    return jsonify({'error': 'Failed to send OTP'}), 500
+            
+            elif otp and session_id:
+                if not hasattr(current_app, 'login_sessions') or session_id not in current_app.login_sessions:
+                    return jsonify({'error': 'Session expired'}), 401
+                
+                session_data = current_app.login_sessions[session_id]
+                
+                if datetime.utcnow() > session_data['expires_at']:
+                    del current_app.login_sessions[session_id]
+                    return jsonify({'error': 'Session expired'}), 401
+                
+                if verify_otp(session_data['email'], otp):
+                    del current_app.login_sessions[session_id]
+                    
                     token = jwt.encode(
-                        {'id': admin.id, 'role': 'admin', 'email': admin.email,
+                        {'id': 1, 'role': 'admin', 'email': email, 'is_admin': True,
                          'exp': datetime.utcnow() + timedelta(days=30)},
-                        JWT_SECRET_KEY, algorithm='HS256'
+                        current_app.config['JWT_SECRET_KEY'], algorithm='HS256'
                     )
                     return jsonify({
                         'success': True,
                         'access_token': token,
-                        'admin': {'id': admin.id, 'username': admin.username, 'email': admin.email}
+                        'admin': {
+                            'id': 1, 
+                            'username': 'admin', 
+                            'email': email, 
+                            'full_name': 'Super Admin', 
+                            'role': 'super'
+                        }
                     }), 200
+                else:
+                    return jsonify({'error': 'Invalid OTP'}), 401
+            else:
+                return jsonify({'error': 'Invalid request'}), 400
         
         return jsonify({'error': 'Invalid credentials'}), 401
-        
     except Exception as e:
         print(f"Admin login error: {e}")
         return jsonify({'error': str(e)}), 500
-
 
 # =====================================================
 # VERIFY TOKEN
@@ -467,3 +626,31 @@ def verify_auth_token():
     except Exception as e:
         print(f"Verify token error: {e}")
         return jsonify({'valid': False, 'error': str(e)}), 401
+    
+
+
+
+# Add new route for resend OTP
+@auth_bp.route('/resend-otp', methods=['POST'])
+def resend_otp_code():
+    try:
+        data = request.get_json()
+        session_id = data.get('session_id')
+        user_type = data.get('user_type', 'student')
+        
+        if not hasattr(current_app, 'login_sessions') or session_id not in current_app.login_sessions:
+            return jsonify({'error': 'Session expired'}), 401
+        
+        session_data = current_app.login_sessions[session_id]
+        success, otp_code = resend_otp(session_data['email'], user_type)
+        
+        if success:
+            session_data['expires_at'] = datetime.utcnow() + timedelta(minutes=10)
+            current_app.login_sessions[session_id] = session_data
+            
+            return jsonify({'success': True, 'message': 'OTP resent successfully'}), 200
+        else:
+            return jsonify({'error': 'Failed to resend OTP'}), 500
+    except Exception as e:
+        print(f"Resend OTP error: {e}")
+        return jsonify({'error': str(e)}), 500
