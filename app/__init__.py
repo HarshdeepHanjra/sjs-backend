@@ -254,7 +254,10 @@ def create_app():
     app.config['MAIL_USE_SSL'] = os.getenv('MAIL_USE_SSL', 'False').lower() == 'true'
     app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME', 'sjsglobaltech@gmail.com')
     app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD', 'oijb jpqd ivgc upbt')
-    app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', 'SJS Academy <noreply@sjsacademy.com>')
+    app.config['MAIL_DEFAULT_SENDER'] = (
+        'SJS Academy',
+        app.config['MAIL_USERNAME']
+    )
     app.config['MAIL_SUPPRESS_SEND'] = os.getenv('MAIL_SUPPRESS_SEND', 'False').lower() == 'true'
     
     print(f"✅ Email configured for: {app.config['MAIL_USERNAME']}")

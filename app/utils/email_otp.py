@@ -110,7 +110,10 @@ def send_email_otp(email, otp, user_type='student'):
             html=html_content
         )
         
-        Thread(target=send_async_email, args=(current_app._get_current_object(), msg)).start()
+        mail.send(msg)
+
+        print(f"✅ OTP Email Sent Successfully To: {email}")
+
         return True
     except Exception as e:
         print(f"Failed to send OTP: {e}")
@@ -118,7 +121,10 @@ def send_email_otp(email, otp, user_type='student'):
 
 def send_otp(email, user_type='student'):
     """Generate and send OTP"""
+    
     otp = generate_otp()
+    
+    print(f"🔐 OTP Generated For {email}: {otp}")
     
     otp_storage[email] = {
         'otp': otp,
