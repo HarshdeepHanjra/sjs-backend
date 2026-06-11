@@ -9,7 +9,8 @@ import jwt
 from datetime import datetime, timedelta
 import os
 import secrets
-from app.utils.email_otp import resend_otp, send_otp, verify_otp, resend_otpp
+from app.utils.email_otp import send_otp, verify_otp, resend_otp
+
 
 auth_bp = Blueprint('auth', __name__)
 JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'sjs-academy-jwt-secret-2024')
