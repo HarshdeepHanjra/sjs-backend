@@ -945,8 +945,6 @@ def student_login():
         data = request.get_json()
         email = data.get('email')
         password = data.get('password')
-        otp = data.get('otp')
-        session_id = data.get('session_id')
         
         print(f"Student login attempt: {email}")
         
@@ -965,78 +963,36 @@ def student_login():
             print(f"Invalid password for: {email}")
             return jsonify({'error': 'Invalid email or password'}), 401
         
-        # First step - password verified, need OTP
-        if not otp and not session_id:
-            session_id = str(uuid.uuid4())
-            success, otp_code = send_otp(student.email, 'student')
-            
-            if success:
-                if not hasattr(current_app, 'login_sessions'):
-                    current_app.login_sessions = {}
-                
-                current_app.login_sessions[session_id] = {
-                    'user_id': student.id,
-                    'role': 'student',
-                    'email': student.email,
-                    'expires_at': datetime.utcnow() + timedelta(minutes=10)
-                }
-                
-                print(f"OTP sent to: {student.email}")
-                
-                return jsonify({
-                    'requires_otp': True,
-                    'session_id': session_id,
-                    'message': f'OTP sent to {student.email}'
-                }), 200
-            else:
-                return jsonify({'error': 'Failed to send OTP. Please try again.'}), 500
+        # Generate token directly (NO OTP)
+        jwt_secret = current_app.config.get('JWT_SECRET_KEY', os.getenv('JWT_SECRET_KEY', 'sjs-academy-secret-key-2024'))
         
-        # Second step - Verify OTP
-        elif otp and session_id:
-            if not hasattr(current_app, 'login_sessions') or session_id not in current_app.login_sessions:
-                return jsonify({'error': 'Session expired. Please login again.'}), 401
-            
-            session_data = current_app.login_sessions[session_id]
-            
-            if datetime.utcnow() > session_data['expires_at']:
-                del current_app.login_sessions[session_id]
-                return jsonify({'error': 'Session expired. Please login again.'}), 401
-            
-            if verify_otp(session_data['email'], otp):
-                del current_app.login_sessions[session_id]
+        token = jwt.encode(
+            {
+                'id': student.id, 
+                'role': 'student', 
+                'email': student.email, 
+                'name': student.name, 
+                'student_id': student.student_id, 
+                'exp': datetime.utcnow() + timedelta(days=30)
+            },
+            jwt_secret, 
+            algorithm='HS256'
+        )
+        
+        print(f"✅ Student login successful: {email}")
+        
+        return jsonify({
+            'success': True,
+            'access_token': token,
+            'student': {
+                'id': student.id, 
+                'student_id': student.student_id, 
+                'name': student.name, 
+                'email': student.email,
+                'phone': student.phone or ''
+            }
+        }), 200
                 
-                # FIX: Use JWT_SECRET_KEY directly from config
-                jwt_secret = current_app.config.get('JWT_SECRET_KEY', os.getenv('JWT_SECRET_KEY', 'sjs-academy-secret-key-2024'))
-                
-                token = jwt.encode(
-                    {
-                        'id': student.id, 
-                        'role': 'student', 
-                        'email': student.email, 
-                        'name': student.name, 
-                        'student_id': student.student_id, 
-                        'exp': datetime.utcnow() + timedelta(days=30)
-                    },
-                    jwt_secret, 
-                    algorithm='HS256'
-                )
-                
-                return jsonify({
-                    'success': True,
-                    'access_token': token,
-                    'student': {
-                        'id': student.id, 
-                        'student_id': student.student_id, 
-                        'name': student.name, 
-                        'email': student.email,
-                        'phone': student.phone or ''
-                    }
-                }), 200
-            else:
-                return jsonify({'error': 'Invalid or expired OTP'}), 401
-        else:
-            return jsonify({'error': 'Invalid request'}), 400
-            
     except Exception as e:
         print(f"Student login error: {e}")
         import traceback
@@ -1065,6 +1021,7 @@ def admin_login():
         
         if email == 'admin@sjsacademy.com' and password == 'Admin@123':
             
+            # First step - password verified, need OTP
             if not otp and not session_id:
                 session_id = str(uuid.uuid4())
                 success, otp_code = send_otp(ADMIN_EMAIL, 'admin')
@@ -1090,6 +1047,7 @@ def admin_login():
                 else:
                     return jsonify({'error': 'Failed to send OTP. Please try again.'}), 500
             
+            # Second step - Verify OTP
             elif otp and session_id:
                 if not hasattr(current_app, 'login_sessions') or session_id not in current_app.login_sessions:
                     return jsonify({'error': 'Session expired. Please login again.'}), 401
@@ -1103,7 +1061,6 @@ def admin_login():
                 if verify_otp(session_data['email'], otp):
                     del current_app.login_sessions[session_id]
                     
-                    # FIX: Use JWT_SECRET_KEY directly from config
                     jwt_secret = current_app.config.get('JWT_SECRET_KEY', os.getenv('JWT_SECRET_KEY', 'sjs-academy-secret-key-2024'))
                     
                     token = jwt.encode(
