@@ -110,11 +110,12 @@ def send_email_otp(email, otp, user_type='student'):
             recipients=[email],
             html=html_content
         )
-        
+        print("BEFORE MAIL SEND")
         print(f"📧 Sending OTP email to: {email}")
         print(f"📧 Subject: {subject}")
         
         mail.send(msg)
+        print("AFTER MAIL SEND")
 
         print(f"✅ OTP Email Sent Successfully To: {email}")
 
