@@ -54,18 +54,20 @@
 #     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=30)
     
 #     # =====================================================
-#     # EMAIL CONFIGURATION
+#     # EMAIL CONFIGURATION FOR OTP
 #     # =====================================================
-#     app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-#     app.config['MAIL_PORT'] = 587
-#     app.config['MAIL_USE_TLS'] = True
-#     app.config['MAIL_USE_SSL'] = False
+#     app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
+#     app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT', 587))
+#     app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', 'True').lower() == 'true'
+#     app.config['MAIL_USE_SSL'] = os.getenv('MAIL_USE_SSL', 'False').lower() == 'true'
 #     app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME', 'sjsglobaltech@gmail.com')
 #     app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
-#     app.config['MAIL_DEFAULT_SENDER'] = ('SJS Academy', 'noreply@sjsacademy.com')
+#     app.config['MAIL_DEFAULT_SENDER'] = app.config['MAIL_USERNAME']
 #     app.config['MAIL_SUPPRESS_SEND'] = os.getenv('MAIL_SUPPRESS_SEND', 'False').lower() == 'true'
     
-#     print(f"Email configured for: {app.config['MAIL_USERNAME']}")
+#     print(f"✅ Email configured for: {app.config['MAIL_USERNAME']}")
+#     app.config['MAIL_DEBUG'] = True
+#     app.config['MAIL_TIMEOUT'] = 10
     
 #     # Create upload folders
 #     os.makedirs('uploads/screenshots', exist_ok=True)
@@ -73,10 +75,10 @@
 #     os.makedirs('uploads/mentors', exist_ok=True)
     
 #     # =====================================================
-#     # CORS Configuration - SINGLE SOURCE OF TRUTH (FIXED)
+#     # CORS Configuration
 #     # =====================================================
     
-#     # Allowed origins (remove duplicates)
+#     # Allowed origins
 #     ALLOWED_ORIGINS = [
 #         "https://sjs-frontend-delta.vercel.app",
 #         "https://sjs-frontend.vercel.app",
@@ -89,7 +91,7 @@
 #     # Remove duplicates
 #     ALLOWED_ORIGINS = list(set(ALLOWED_ORIGINS))
     
-#     # Single CORS configuration (NO @app.after_request)
+#     # Single CORS configuration
 #     CORS(app, 
 #          origins=ALLOWED_ORIGINS,
 #          methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
@@ -106,6 +108,9 @@
 #     bcrypt.init_app(app)
 #     mail.init_app(app)
     
+#     # Initialize login sessions storage (for OTP)
+#     app.login_sessions = {}
+    
 #     # =====================================================
 #     # IMPORT AND REGISTER BLUEPRINTS
 #     # =====================================================
@@ -120,6 +125,7 @@
 #     from app.routes.user import user_bp
 #     from app.routes.contact import contact_bp
 #     from app.routes.mentor import mentor_bp
+#     from app.routes.admin_students import admin_students_bp
     
 #     # Register blueprints with consistent /api prefix
 #     app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -133,6 +139,7 @@
 #     app.register_blueprint(attendance_bp, url_prefix='/api')
 #     app.register_blueprint(contact_bp, url_prefix='/api/contact')
 #     app.register_blueprint(mentor_bp, url_prefix='/api/mentor')
+#     app.register_blueprint(admin_students_bp)
     
 #     # =====================================================
 #     # STATIC FILE SERVING
@@ -161,7 +168,13 @@
 #     @app.route('/uploads/certificates/<filename>')
 #     def certificate_file(filename):
 #         """Serve certificate files"""
-#         possible_dirs = ['uploads/certificates', './uploads/certificates', 'app/uploads/certificates', './app/uploads/certificates']
+#         possible_dirs = [
+#             'uploads/certificates', 
+#             './uploads/certificates', 
+#             'app/uploads/certificates', 
+#             './app/uploads/certificates',
+#             os.path.join(os.getcwd(), 'uploads', 'certificates'),
+#         ]
 #         for directory in possible_dirs:
 #             if os.path.exists(directory) and os.path.exists(os.path.join(directory, filename)):
 #                 return send_from_directory(directory, filename)
@@ -170,7 +183,13 @@
 #     @app.route('/uploads/mentors/<filename>')
 #     def mentor_photo(filename):
 #         """Serve mentor photos"""
-#         possible_dirs = ['uploads/mentors', './uploads/mentors', 'app/uploads/mentors', './app/uploads/mentors']
+#         possible_dirs = [
+#             'uploads/mentors', 
+#             './uploads/mentors', 
+#             'app/uploads/mentors', 
+#             './app/uploads/mentors',
+#             os.path.join(os.getcwd(), 'uploads', 'mentors'),
+#         ]
 #         for directory in possible_dirs:
 #             if os.path.exists(directory) and os.path.exists(os.path.join(directory, filename)):
 #                 return send_from_directory(directory, filename)
@@ -187,7 +206,16 @@
 #     def health():
 #         return jsonify({'status': 'ok', 'message': 'Server is healthy'})
     
+#     # Create tables if they don't exist
+#     with app.app_context():
+#         try:
+#             db.create_all()
+#             print("✅ Database tables created/verified successfully!")
+#         except Exception as e:
+#             print(f"⚠️ Database table creation warning: {e}")
+    
 #     return app
+
 
 
 from flask import Flask, jsonify, request, send_from_directory
@@ -267,33 +295,60 @@ def create_app():
     os.makedirs('uploads/mentors', exist_ok=True)
     
     # =====================================================
-    # CORS Configuration
+    # FIXED CORS Configuration - Allow All for Testing
     # =====================================================
     
-    # Allowed origins
-    ALLOWED_ORIGINS = [
-        "https://sjs-frontend-delta.vercel.app",
-        "https://sjs-frontend.vercel.app",
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173"
-    ]
-    
-    # Remove duplicates
-    ALLOWED_ORIGINS = list(set(ALLOWED_ORIGINS))
-    
-    # Single CORS configuration
+    # Method 1: Allow all origins (Quick fix for now)
     CORS(app, 
-         origins=ALLOWED_ORIGINS,
-         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-         allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept"],
-         supports_credentials=True,
-         expose_headers=["Content-Type", "Authorization"],
-         max_age=3600)
+         resources={
+             r"/api/*": {
+                 "origins": "*",
+                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+                 "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+                 "expose_headers": ["Content-Type", "Authorization"],
+                 "max_age": 3600
+             },
+             r"/api/admin/*": {
+                 "origins": "*",
+                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+                 "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+                 "expose_headers": ["Content-Type", "Authorization"],
+                 "max_age": 3600
+             },
+             r"/api/admin/students/*": {
+                 "origins": "*",
+                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+                 "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+                 "expose_headers": ["Content-Type", "Authorization"],
+                 "max_age": 3600
+             }
+         },
+         supports_credentials=True)
     
     print(f"✅ CORS configured successfully!")
-    print(f"   Allowed origins: {ALLOWED_ORIGINS}")
+    print(f"   Allowed origins: * (all origins)")
+    
+    # =====================================================
+    # GLOBAL CORS HANDLER - For all routes
+    # =====================================================
+    @app.after_request
+    def after_request(response):
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept,X-Requested-With')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,PATCH,OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+    
+    # Handle preflight requests globally
+    @app.route('/<path:path>', methods=['OPTIONS'])
+    def handle_options(path):
+        response = jsonify({'message': 'OK'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept,X-Requested-With')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,PATCH,OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers.add('Access-Control-Max-Age', '3600')
+        return response, 200
     
     # Initialize extensions with app
     db.init_app(app)
