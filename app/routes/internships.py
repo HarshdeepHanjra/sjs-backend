@@ -964,7 +964,6 @@ def admin_get_all_internships():
                     "original_fee": float(i.original_fee) if i.original_fee else None,
                     "stipend": i.stipend,
                     "mode": i.mode,
-                    "start_date": i.start_date,
                     "slots": i.slots,
                     "enrolled": i.enrolled,
                     "rating": float(i.rating),
@@ -1016,7 +1015,6 @@ def admin_create_internship():
             original_fee=float(data.get("original_fee", 0)) if data.get("original_fee") else None,
             stipend=data.get("stipend", "Unpaid"),
             mode=data.get("mode", "Online"),
-            start_date=data.get("start_date", "Monthly Batch"),
             slots=int(data.get("slots", 0)),
             enrolled=int(data.get("enrolled", 0)),
             rating=float(data.get("rating", 4.5)),
@@ -1082,8 +1080,6 @@ def admin_update_internship(internship_id):
             internship.stipend = data["stipend"]
         if "mode" in data:
             internship.mode = data["mode"]
-        if "start_date" in data:
-            internship.start_date = data["start_date"]
         if "slots" in data:
             internship.slots = int(data["slots"])
         if "enrolled" in data:
