@@ -36,47 +36,69 @@ def get_all_students():
 def delete_student(student_id):
     """Delete a student and all related data"""
     if request.method == "OPTIONS":
-        # Return empty response with CORS headers for preflight
         response = jsonify({})
-        response.headers.add('Access-Control-Allow-Origin', 'https://sjs-frontend-delta.vercel.app')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'DELETE,OPTIONS')
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
         return response, 200
     
     try:
+        print(f"📥 Attempting to delete student ID: {student_id}")
+        
+        # Find student
         student = Student.query.get(student_id)
         
         if not student:
+            print(f"❌ Student with ID {student_id} not found")
             return jsonify({"success": False, "message": "Student not found"}), 404
         
-        student_name = student.name
+        print(f"📋 Student found: {student.name} (ID: {student.id})")
         
-        # Delete related data
-        InternshipOrder.query.filter_by(student_id=student_id).delete()
-        InternshipEnrollment.query.filter_by(student_id=student_id).delete()
-        PaymentVerification.query.filter_by(student_id=student_id).delete()
+        # Delete related data from internship_orders
+        deleted_orders = InternshipOrder.query.filter_by(student_id=student_id).delete()
+        print(f"   Deleted {deleted_orders} internship orders")
         
+        # Delete from internship_enrollments
+        deleted_enrollments = InternshipEnrollment.query.filter_by(student_id=student_id).delete()
+        print(f"   Deleted {deleted_enrollments} internship enrollments")
+        
+        # Delete from payment_verifications
+        deleted_payments = PaymentVerification.query.filter_by(student_id=student_id).delete()
+        print(f"   Deleted {deleted_payments} payment verifications")
+        
+        # Delete from certificates
         try:
             from app.models.certificate import Certificate
-            Certificate.query.filter_by(student_id=student_id).delete()
-        except:
-            pass
+            deleted_certs = Certificate.query.filter_by(student_id=student_id).delete()
+            print(f"   Deleted {deleted_certs} certificates")
+        except Exception as e:
+            print(f"   Certificate deletion skipped: {e}")
         
+        # Delete the student
+        student_name = student.name
         db.session.delete(student)
         db.session.commit()
         
+        print(f"✅ Student '{student_name}' (ID: {student_id}) deleted successfully!")
+        
         response = jsonify({
             "success": True,
-            "message": f"Student '{student_name}' deleted successfully"
+            "message": f"Student '{student_name}' and all related data deleted successfully"
         })
-        response.headers.add('Access-Control-Allow-Origin', 'https://sjs-frontend-delta.vercel.app')
+        response.headers.add('Access-Control-Allow-Origin', '*')
         return response, 200
         
     except Exception as e:
         db.session.rollback()
-        print(f"Error deleting student: {e}")
-        response = jsonify({"success": False, "message": str(e)})
-        response.headers.add('Access-Control-Allow-Origin', 'https://sjs-frontend-delta.vercel.app')
+        print(f"❌ Error deleting student: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
+        response = jsonify({
+            "success": False, 
+            "message": f"Error: {str(e)}"
+        })
+        response.headers.add('Access-Control-Allow-Origin', '*')
         return response, 500
 
 
