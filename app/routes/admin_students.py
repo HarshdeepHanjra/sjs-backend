@@ -34,9 +34,14 @@ def get_all_students():
 @token_required
 @admin_required
 def delete_student(student_id):
-    """Delete a student and all related data (admin only)"""
+    """Delete a student and all related data"""
     if request.method == "OPTIONS":
-        return "", 200
+        # Return empty response with CORS headers for preflight
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', 'https://sjs-frontend-delta.vercel.app')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'DELETE,OPTIONS')
+        return response, 200
     
     try:
         student = Student.query.get(student_id)
@@ -45,49 +50,34 @@ def delete_student(student_id):
             return jsonify({"success": False, "message": "Student not found"}), 404
         
         student_name = student.name
-        student_email = student.email
         
-        # Delete all related data manually (for models without cascade)
-        # Internship orders
+        # Delete related data
         InternshipOrder.query.filter_by(student_id=student_id).delete()
-        
-        # Internship enrollments
         InternshipEnrollment.query.filter_by(student_id=student_id).delete()
-        
-        # Payment verifications
         PaymentVerification.query.filter_by(student_id=student_id).delete()
         
-        # Certificates (if Certificate model exists)
         try:
             from app.models.certificate import Certificate
             Certificate.query.filter_by(student_id=student_id).delete()
         except:
             pass
         
-        # Attendance records (if Attendance model exists)
-        try:
-            from app.models.attendance import Attendance
-            Attendance.query.filter_by(student_id=student_id).delete()
-        except:
-            pass
-        
-        # Finally delete the student
         db.session.delete(student)
         db.session.commit()
         
-        print(f"✅ Student deleted: {student_name} ({student_email})")
-        
-        return jsonify({
+        response = jsonify({
             "success": True,
-            "message": f"Student '{student_name}' and all related data deleted successfully"
-        }), 200
+            "message": f"Student '{student_name}' deleted successfully"
+        })
+        response.headers.add('Access-Control-Allow-Origin', 'https://sjs-frontend-delta.vercel.app')
+        return response, 200
         
     except Exception as e:
         db.session.rollback()
         print(f"Error deleting student: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"success": False, "message": str(e)}), 500
+        response = jsonify({"success": False, "message": str(e)})
+        response.headers.add('Access-Control-Allow-Origin', 'https://sjs-frontend-delta.vercel.app')
+        return response, 500
 
 
 @admin_students_bp.route("/admin/students/<int:student_id>", methods=["PUT", "OPTIONS"])
