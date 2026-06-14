@@ -502,7 +502,6 @@
 
 
 
-
 import cloudinary
 import cloudinary.uploader
 from flask import Blueprint, request, jsonify, current_app
@@ -517,45 +516,35 @@ import os
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import uuid
+import requests  # ✅ ADD THIS IMPORT - Missing!
 
 payments_bp = Blueprint('payments', __name__)
 
 # =====================================================
-# CASHFREE CONFIGURATION - COMPLETE WORKING CODE
+# CASHFREE CONFIGURATION - SIMPLIFIED (NO SDK REQUIRED)
 # =====================================================
 CASHFREE_APP_ID = os.getenv('CASHFREE_APP_ID', '')
 CASHFREE_SECRET_KEY = os.getenv('CASHFREE_SECRET_KEY', '')
 CASHFREE_ENVIRONMENT = os.getenv('CASHFREE_ENVIRONMENT', 'sandbox')
-cashfree_instance = None
 CASHFREE_AVAILABLE = False
 
-# Check if credentials exist
-if CASHFREE_APP_ID and CASHFREE_SECRET_KEY:
-    try:
-        # Try to import and configure
-        import cashfree_pg
-        from cashfree_pg import Cashfree
-        
-        # Configure Cashfree
-        cashfree_instance = Cashfree(
-            app_id=CASHFREE_APP_ID,
-            secret_key=CASHFREE_SECRET_KEY,
-            environment="sandbox" if CASHFREE_ENVIRONMENT == 'sandbox' else "production"
-        )
-        CASHFREE_AVAILABLE = True
-        print(f"✅ Cashfree configured in {CASHFREE_ENVIRONMENT} mode")
-        
-    except ImportError:
-        print("⚠️ Cashfree SDK not installed.")
-        print("   Install: pip install cashfree-pg")
-    except Exception as e:
-        print(f"⚠️ Cashfree error: {e}")
-else:
-    print("⚠️ Cashfree credentials not found. Set CASHFREE_APP_ID and CASHFREE_SECRET_KEY")
+# Log configuration status
+print(f"🔧 Cashfree Config Check:")
+print(f"   APP_ID: {'✅ Set' if CASHFREE_APP_ID else '❌ Missing'}")
+print(f"   SECRET_KEY: {'✅ Set' if CASHFREE_SECRET_KEY else '❌ Missing'}")
+print(f"   ENVIRONMENT: {CASHFREE_ENVIRONMENT}")
 
-# Fallback payment methods
-if not CASHFREE_AVAILABLE:
-    print("💡 Using UPI and Bank Transfer only. Cashfree will be available when configured.")
+if CASHFREE_APP_ID and CASHFREE_SECRET_KEY:
+    CASHFREE_AVAILABLE = True
+    if CASHFREE_ENVIRONMENT == 'production':
+        CASHFREE_API_URL = "https://api.cashfree.com/pg"
+    else:
+        CASHFREE_API_URL = "https://sandbox.cashfree.com/pg"
+    print(f"✅ Cashfree configured in {CASHFREE_ENVIRONMENT.upper()} mode")
+    print(f"   API URL: {CASHFREE_API_URL}")
+else:
+    print("⚠️ Cashfree not configured. Set CASHFREE_APP_ID and CASHFREE_SECRET_KEY")
+    print("💡 Using UPI and Bank Transfer only.")
 
 # Cloudinary configuration
 CLOUDINARY_CLOUD_NAME = os.getenv('CLOUDINARY_CLOUD_NAME', 'dxxpeilta')
@@ -611,7 +600,7 @@ def get_payment_methods():
     ]
     
     # Add Cashfree if configured
-    if cashfree_instance:
+    if CASHFREE_AVAILABLE:
         payment_methods.append({
             'id': 'cashfree',
             'name': 'Cards / NetBanking / UPI',
@@ -651,7 +640,7 @@ def get_bank_details():
 
 
 # =====================================================
-# CASHFREE PAYMENT ROUTES (FIXED)
+# CASHFREE PAYMENT ROUTES
 # =====================================================
 
 @payments_bp.route('/create-cashfree-order', methods=['POST', 'OPTIONS'])
@@ -662,6 +651,9 @@ def create_cashfree_order():
         return '', 200
     
     try:
+        if not CASHFREE_AVAILABLE:
+            return jsonify({'error': 'Cashfree not configured. Please use UPI or Bank Transfer.'}), 400
+        
         data = request.get_json()
         amount = float(data.get('amount', 0))
         order_type = data.get('order_type', 'course')
@@ -672,9 +664,6 @@ def create_cashfree_order():
         user = request.user
         student = Student.query.get(user['id'])
         
-        if not cashfree_instance:
-            return jsonify({'error': 'Cashfree not configured. Please contact support.'}), 500
-        
         # Generate unique order ID
         order_id = f"{order_type}_{uuid.uuid4().hex[:12]}_{int(datetime.now().timestamp())}"
         
@@ -684,6 +673,7 @@ def create_cashfree_order():
         
         # Prepare customer details
         customer_phone = student.phone or user.get('phone', '9999999999')
+        customer_phone = str(customer_phone).replace('+', '').replace('-', '').strip()
         if len(customer_phone) < 10:
             customer_phone = '9999999999'
         
@@ -696,16 +686,14 @@ def create_cashfree_order():
                 "customer_id": str(user['id']),
                 "customer_email": student.email or user.get('email'),
                 "customer_phone": customer_phone,
-                "customer_name": student.name or user.get('name', 'Customer')
+                "customer_name": student.name or user.get('name', 'Customer')[:50]
             },
             "order_meta": {
                 "return_url": return_url
             }
         }
         
-        # Call Cashfree API directly
-        api_url = "https://sandbox.cashfree.com/pg/orders" if CASHFREE_ENVIRONMENT == 'sandbox' else "https://api.cashfree.com/pg/orders"
-        
+        # Cashfree API headers
         headers = {
             "Content-Type": "application/json",
             "x-api-version": "2022-09-01",
@@ -713,8 +701,17 @@ def create_cashfree_order():
             "x-client-secret": CASHFREE_SECRET_KEY
         }
         
-        response = requests.post(api_url, json=order_payload, headers=headers)
+        api_url = f"{CASHFREE_API_URL}/orders"
+        
+        print(f"📤 Creating Cashfree order: {order_id}")
+        print(f"   Mode: {CASHFREE_ENVIRONMENT.upper()}")
+        print(f"   Amount: ₹{amount}")
+        print(f"   Customer: {customer_phone}")
+        
+        response = requests.post(api_url, json=order_payload, headers=headers, timeout=30)
         result = response.json()
+        
+        print(f"📥 Cashfree Response Status: {response.status_code}")
         
         if response.status_code == 200 and 'payment_session_id' in result:
             payment_session_id = result['payment_session_id']
@@ -754,11 +751,15 @@ def create_cashfree_order():
                 'currency': 'INR'
             }), 200
         else:
-            print(f"Cashfree API error: {result}")
-            return jsonify({'error': result.get('message', 'Failed to create order')}), 500
+            error_msg = result.get('message', 'Failed to create order')
+            print(f"❌ Cashfree API error: {error_msg}")
+            return jsonify({'error': error_msg}), 500
         
+    except requests.exceptions.Timeout:
+        print("❌ Cashfree API timeout")
+        return jsonify({'error': 'Payment gateway timeout. Please try again.'}), 504
     except Exception as e:
-        print(f"Cashfree order error: {e}")
+        print(f"❌ Cashfree order error: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
@@ -775,8 +776,8 @@ def verify_cashfree_payment():
         data = request.get_json()
         order_id = data.get('order_id')
         
-        # Call Cashfree API to get order status
-        api_url = f"https://sandbox.cashfree.com/pg/orders/{order_id}" if CASHFREE_ENVIRONMENT == 'sandbox' else f"https://api.cashfree.com/pg/orders/{order_id}"
+        if not CASHFREE_AVAILABLE:
+            return jsonify({'error': 'Cashfree not configured'}), 400
         
         headers = {
             "Content-Type": "application/json",
@@ -785,7 +786,9 @@ def verify_cashfree_payment():
             "x-client-secret": CASHFREE_SECRET_KEY
         }
         
-        response = requests.get(api_url, headers=headers)
+        api_url = f"{CASHFREE_API_URL}/orders/{order_id}"
+        
+        response = requests.get(api_url, headers=headers, timeout=30)
         result = response.json()
         
         if response.status_code == 200:
@@ -1054,7 +1057,7 @@ def get_verification_status(verification_id):
             return jsonify({'error': 'Verification not found'}), 404
         
         user = request.user
-        if verification.student_id != user['id']:
+        if verification.student_id != user['id'] and user.get('role') != 'admin':
             return jsonify({'error': 'Unauthorized'}), 403
         
         status_messages = {
@@ -1103,6 +1106,7 @@ def get_payment_requests():
                 'amount': float(v.amount) if v.amount else 0,
                 'transaction_id': v.transaction_id,
                 'screenshot_url': v.screenshot_url,
+                'payment_method': getattr(v, 'payment_method', 'bank_transfer'),
                 'status': v.status,
                 'created_at': v.created_at.isoformat() if v.created_at else None
             })
@@ -1127,62 +1131,44 @@ def approve_payment(request_id):
         data = request.get_json()
         admin_notes = data.get('notes', 'Payment verified and approved.')
         
-        # Get verification record
         verification = PaymentVerification.query.get(request_id)
         if not verification:
             return jsonify({'error': 'Verification not found'}), 404
         
-        # Update verification status
         verification.status = 'approved'
         verification.admin_notes = admin_notes
         verification.verified_at = datetime.utcnow()
         
-        # Get the order
         order = Order.query.filter_by(order_id=verification.order_id).first()
         if not order:
-            return jsonify({'error': 'Order not found'}), 404
+            internship_order = InternshipOrder.query.filter_by(order_id=verification.order_id).first()
+            if internship_order:
+                internship_order.payment_status = 'completed'
+                internship_order.status = 'active'
+            return jsonify({'success': True, 'message': 'Payment approved!'}), 200
         
-        # Update order status
         order.payment_status = 'completed'
         order.transaction_id = verification.transaction_id
         
-        # Get courses from order
         order_courses = order.courses if isinstance(order.courses, list) else []
         
-        print(f"\n{'='*60}")
-        print(f"📝 APPROVING PAYMENT - Adding to Enrollment")
-        print(f"Order ID: {order.order_id}")
-        print(f"Student ID: {verification.student_id}")
-        print(f"Student Email: {verification.student_email}")
-        print(f"Order Courses: {order_courses}")
-        print(f"{'='*60}\n")
-        
-        # Import models
         from app.models.course import Enrollment, Course
         
         courses_added = []
         
-        # For each course in the order, add to enrollments table
         for course_data in order_courses:
-            # Get course ID
             if isinstance(course_data, dict):
                 course_id = course_data.get('id')
-                course_name = course_data.get('name', 'Unknown')
             else:
                 course_id = getattr(course_data, 'id', None)
-                course_name = getattr(course_data, 'name', 'Unknown')
             
             if course_id:
-                print(f"Processing course ID: {course_id} - {course_name}")
-                
-                # Check if already enrolled
                 existing = Enrollment.query.filter_by(
                     student_id=verification.student_id,
                     course_id=course_id
                 ).first()
                 
                 if not existing:
-                    # Create enrollment
                     enrollment = Enrollment(
                         student_id=verification.student_id,
                         course_id=course_id,
@@ -1192,55 +1178,24 @@ def approve_payment(request_id):
                     )
                     db.session.add(enrollment)
                     courses_added.append(course_id)
-                    print(f"✅ Added to enrollments table: student_id={verification.student_id}, course_id={course_id}")
                     
-                    # Update student's course_ids JSON field
                     student = Student.query.get(verification.student_id)
                     if student:
                         if student.course_ids is None:
                             student.course_ids = []
                         if course_id not in student.course_ids:
                             student.course_ids.append(course_id)
-                            print(f"✅ Added course {course_id} to student.course_ids")
                     
-                    # Update course student count
                     course = Course.query.get(course_id)
                     if course:
                         course.students_enrolled = (course.students_enrolled or 0) + 1
-                        db.session.add(course)
-                        print(f"✅ Updated course {course_id} students_enrolled to {course.students_enrolled}")
-                else:
-                    print(f"⚠️ Already enrolled in course {course_id}")
         
-        # Commit all changes
         db.session.commit()
-        
-        # Verify enrollment was added
-        verify_enrollments = Enrollment.query.filter_by(
-            student_id=verification.student_id
-        ).all()
-        
-        print(f"\n📊 Enrollment Summary:")
-        print(f"   Total enrollments for student {verification.student_id}: {len(verify_enrollments)}")
-        for enc in verify_enrollments:
-            print(f"   - Course ID: {enc.course_id}, Status: {enc.status}")
-        
-        print(f"\n✅ Payment approved successfully!")
-        print(f"   Courses added: {courses_added}")
-        print(f"{'='*60}\n")
-        
-        # Update internship order if exists
-        internship_order = InternshipOrder.query.filter_by(order_id=verification.order_id).first()
-        if internship_order:
-            internship_order.payment_status = 'completed'
-            internship_order.status = 'active'
-            db.session.commit()
         
         return jsonify({
             'success': True,
-            'message': 'Payment approved successfully! Courses added to student account.',
-            'courses_added': courses_added,
-            'total_enrollments': len(verify_enrollments)
+            'message': 'Payment approved successfully!',
+            'courses_added': courses_added
         }), 200
         
     except Exception as e:
@@ -1268,11 +1223,8 @@ def decline_payment(request_id):
         
         verification.status = 'declined'
         verification.admin_notes = admin_notes
+        verification.verified_at = datetime.utcnow()
         
-        if hasattr(verification, 'verified_at'):
-            verification.verified_at = datetime.utcnow()
-        
-        # Update order status
         order = Order.query.filter_by(order_id=verification.order_id).first()
         if order:
             order.payment_status = 'failed'
@@ -1283,12 +1235,7 @@ def decline_payment(request_id):
         
         db.session.commit()
         
-        print(f"✅ Payment declined: {verification.verification_id}")
-        
-        return jsonify({
-            'success': True,
-            'message': 'Payment declined.'
-        }), 200
+        return jsonify({'success': True, 'message': 'Payment declined.'}), 200
     except Exception as e:
         db.session.rollback()
         print(f"Decline error: {e}")
@@ -1322,5 +1269,3 @@ def get_payment_stats():
         }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
-
