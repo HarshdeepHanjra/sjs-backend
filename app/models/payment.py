@@ -39,8 +39,6 @@
 #         }
 
 
-
-
 from app import db
 from datetime import datetime
 
@@ -51,7 +49,7 @@ class PaymentVerification(db.Model):
     verification_id = db.Column(db.String(50), unique=True, nullable=False)
     order_id = db.Column(db.String(50), nullable=False)
     
-    # ✅ ADD FOREIGN KEY - This is important!
+    # Foreign Key to Student
     student_id = db.Column(db.Integer, db.ForeignKey('students.id', ondelete='CASCADE'), nullable=False)
     
     student_name = db.Column(db.String(200), nullable=False)
@@ -59,13 +57,14 @@ class PaymentVerification(db.Model):
     amount = db.Column(db.Float, nullable=False)
     transaction_id = db.Column(db.String(100), nullable=False)
     screenshot_url = db.Column(db.String(500), nullable=False)
+    
+    # ✅ ADD payment_method column (for Cashfree, UPI, Bank Transfer)
+    payment_method = db.Column(db.String(50), default='bank_transfer')  # cashfree, upi, bank_transfer
+    
     status = db.Column(db.String(20), default='pending')
     admin_notes = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     verified_at = db.Column(db.DateTime, nullable=True)
-    
-    # ✅ Add relationship (optional, for cascade delete)
-    # student = db.relationship('Student', backref='payment_verifications', cascade='all')
     
     def to_dict(self):
         return {
@@ -78,6 +77,7 @@ class PaymentVerification(db.Model):
             'amount': self.amount,
             'transaction_id': self.transaction_id,
             'screenshot_url': self.screenshot_url,
+            'payment_method': self.payment_method,  # ✅ Added
             'status': self.status,
             'admin_notes': self.admin_notes,
             'created_at': self.created_at.isoformat() if self.created_at else None,
