@@ -295,42 +295,19 @@ def create_app():
     os.makedirs('uploads/mentors', exist_ok=True)
     
     # =====================================================
-    # FIXED CORS Configuration - Allow All for Testing
+    # FIXED CORS Configuration - Allow All Origins
     # =====================================================
     
-    # Method 1: Allow all origins (Quick fix for now)
+    # Allow all origins for CORS (fixes preflight issues)
     CORS(app, 
-         resources={
-             r"/api/*": {
-                 "origins": "*",
-                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-                 "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
-                 "expose_headers": ["Content-Type", "Authorization"],
-                 "max_age": 3600
-             },
-             r"/api/admin/*": {
-                 "origins": "*",
-                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-                 "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
-                 "expose_headers": ["Content-Type", "Authorization"],
-                 "max_age": 3600
-             },
-             r"/api/admin/students/*": {
-                 "origins": "*",
-                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-                 "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
-                 "expose_headers": ["Content-Type", "Authorization"],
-                 "max_age": 3600
-             }
-         },
-         supports_credentials=True)
+         origins="*",
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+         allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+         supports_credentials=True,
+         expose_headers=["Content-Type", "Authorization"],
+         max_age=3600)
     
-    print(f"✅ CORS configured successfully!")
-    print(f"   Allowed origins: * (all origins)")
-    
-    # =====================================================
-    # GLOBAL CORS HANDLER - For all routes
-    # =====================================================
+    # Global after request handler for CORS
     @app.after_request
     def after_request(response):
         response.headers.add('Access-Control-Allow-Origin', '*')
@@ -339,7 +316,7 @@ def create_app():
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
     
-    # Handle preflight requests globally
+    # Handle OPTIONS preflight requests globally
     @app.route('/<path:path>', methods=['OPTIONS'])
     def handle_options(path):
         response = jsonify({'message': 'OK'})
@@ -349,6 +326,8 @@ def create_app():
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         response.headers.add('Access-Control-Max-Age', '3600')
         return response, 200
+    
+    print(f"✅ CORS configured successfully! (All origins allowed)")
     
     # Initialize extensions with app
     db.init_app(app)
