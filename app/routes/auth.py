@@ -662,6 +662,7 @@
 
 
 import uuid
+import requests
 from flask import Blueprint, current_app, request, jsonify
 from app import db, bcrypt
 from app.models.user import Student, Admin
@@ -763,6 +764,7 @@ def forgot_password():
         if not email:
             return jsonify({'error': 'Email is required'}), 400
         
+        # Check for student
         student = Student.query.filter_by(email=email).first()
         
         if student:
@@ -770,22 +772,38 @@ def forgot_password():
             reset_tokens[reset_token] = {
                 'email': email,
                 'user_type': 'student',
+                'user_id': student.id,
                 'expiry': datetime.utcnow() + timedelta(hours=1)
             }
-            send_reset_email(email, reset_token)
-            print(f"✅ Reset token generated for student: {email}")
+            
+            # Send email using Brevo
+            email_sent = send_password_reset_email_brevo(student, reset_token)
+            
+            if email_sent:
+                print(f"✅ Reset email sent to student: {email}")
+            else:
+                print(f"❌ Failed to send reset email to student: {email}")
         
+        # Check for admin
         admin = Admin.query.filter_by(email=email).first()
         if admin:
             reset_token = generate_reset_token()
             reset_tokens[reset_token] = {
                 'email': email,
                 'user_type': 'admin',
+                'user_id': admin.id,
                 'expiry': datetime.utcnow() + timedelta(hours=1)
             }
-            send_reset_email(email, reset_token)
-            print(f"✅ Reset token generated for admin: {email}")
+            
+            # Send email using Brevo
+            email_sent = send_password_reset_email_brevo(admin, reset_token)
+            
+            if email_sent:
+                print(f"✅ Reset email sent to admin: {email}")
+            else:
+                print(f"❌ Failed to send reset email to admin: {email}")
         
+        # Always return success for security (don't reveal if email exists or not)
         return jsonify({
             'success': True,
             'message': 'If your email is registered, you will receive a password reset link.'
@@ -793,7 +811,167 @@ def forgot_password():
         
     except Exception as e:
         print(f"Forgot password error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+
+def send_password_reset_email_brevo(user, reset_token):
+    """
+    Send password reset email using Brevo API
+    """
+    try:
+        frontend_url = os.getenv('FRONTEND_URL', 'https://sjs-frontend-delta.vercel.app')
+        reset_url = f"{frontend_url}/reset-password?token={reset_token}"
+        
+        brevo_api_key = os.getenv('BREVO_API_KEY')
+        
+        if not brevo_api_key:
+            print("❌ BREVO_API_KEY not configured")
+            return False
+        
+        sender_email = os.getenv('BREVO_SENDER_EMAIL', 'sjsglobaltech@gmail.com')
+        sender_name = os.getenv('BREVO_SENDER_NAME', 'SJS Academy')
+        
+        subject = "Password Reset Request - SJS Academy"
+        
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Password Reset</title>
+            <style>
+                body {{
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #333;
+                    margin: 0;
+                    padding: 0;
+                    background-color: #f4f4f4;
+                }}
+                .container {{
+                    max-width: 600px;
+                    margin: 50px auto;
+                    background-color: #ffffff;
+                    border-radius: 10px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                    overflow: hidden;
+                }}
+                .header {{
+                    background: linear-gradient(135deg, #1a3a5c 0%, #2c5a8c 100%);
+                    color: white;
+                    padding: 30px;
+                    text-align: center;
+                }}
+                .header h1 {{
+                    margin: 0;
+                    font-size: 24px;
+                }}
+                .header p {{
+                    margin: 10px 0 0;
+                    opacity: 0.9;
+                }}
+                .content {{
+                    padding: 30px;
+                }}
+                .button {{
+                    display: inline-block;
+                    background: linear-gradient(135deg, #1a3a5c 0%, #2c5a8c 100%);
+                    color: white;
+                    padding: 12px 30px;
+                    text-decoration: none;
+                    border-radius: 5px;
+                    font-weight: bold;
+                    margin: 20px 0;
+                }}
+                .warning {{
+                    background: #fff3cd;
+                    padding: 15px;
+                    margin: 20px 0;
+                    border-left: 4px solid #ffc107;
+                    border-radius: 5px;
+                }}
+                .footer {{
+                    text-align: center;
+                    padding: 20px;
+                    font-size: 12px;
+                    color: #666;
+                    border-top: 1px solid #eee;
+                    background-color: #f9f9f9;
+                }}
+                .footer a {{
+                    color: #1a3a5c;
+                    text-decoration: none;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>SJS Global Tech Academy</h1>
+                    <p>Password Reset Request</p>
+                </div>
+                <div class="content">
+                    <p>Dear <strong>{user.name}</strong>,</p>
+                    <p>We received a request to reset the password for your SJS Academy account.</p>
+                    <p>Click the button below to create a new password:</p>
+                    <p style="text-align: center;">
+                        <a href="{reset_url}" class="button">Reset Password</a>
+                    </p>
+                    <p>Or copy and paste this link into your browser:</p>
+                    <p><small style="word-break: break-all; color: #1a3a5c;">{reset_url}</small></p>
+                    <div class="warning">
+                        <strong>⚠️ Important:</strong> This link will expire in <strong>1 hour</strong>.<br>
+                        If you did not request a password reset, please ignore this email. Your password will remain unchanged.
+                    </div>
+                </div>
+                <div class="footer">
+                    <p>SJS Global Tech Academy</p>
+                    <p>© 2024 SJS Academy. All rights reserved.</p>
+                    <p><a href="{frontend_url}">Visit our website</a></p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        url = "https://api.brevo.com/v3/smtp/email"
+        
+        payload = {
+            "sender": {
+                "name": sender_name,
+                "email": sender_email
+            },
+            "to": [
+                {
+                    "email": user.email,
+                    "name": user.name
+                }
+            ],
+            "subject": subject,
+            "htmlContent": html_content
+        }
+        
+        headers = {
+            "accept": "application/json",
+            "api-key": brevo_api_key,
+            "content-type": "application/json"
+        }
+        
+        response = requests.post(url, json=payload, headers=headers)
+        
+        if response.status_code == 201:
+            print(f"✅ Password reset email sent to {user.email}")
+            return True
+        else:
+            print(f"❌ Brevo API error: {response.status_code} - {response.text}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Error sending email: {e}")
+        return False
 
 # =====================================================
 # RESET PASSWORD
