@@ -468,7 +468,6 @@
 
 
 
-
 import os
 from unittest import result
 
@@ -957,6 +956,7 @@ def admin_get_all_internships():
             "internships": [
                 {
                     "id": i.id,
+                    "internship_id": i.internship_id,
                     "title": i.title,
                     "category": i.category,
                     "duration": i.duration,
@@ -964,6 +964,7 @@ def admin_get_all_internships():
                     "original_fee": float(i.original_fee) if i.original_fee else None,
                     "stipend": i.stipend,
                     "mode": i.mode,
+                    "start_date": i.start_date if hasattr(i, 'start_date') else "Monthly Batch",
                     "slots": i.slots,
                     "enrolled": i.enrolled,
                     "rating": float(i.rating),
@@ -993,6 +994,11 @@ def admin_create_internship():
 
     try:
         data = request.get_json()
+        print("📥 Received data:", data)
+        
+        # Validate required fields
+        if not data.get('title'):
+            return jsonify({"success": False, "message": "Title is required"}), 400
         
         # Handle syllabus, benefits, requirements (can be JSON arrays or strings)
         syllabus = data.get("syllabus", [])
@@ -1007,14 +1013,16 @@ def admin_create_internship():
         if isinstance(requirements, str):
             requirements = [r.strip() for r in requirements.split(',') if r.strip()]
         
+        # Create new internship (without internship_id - it will be auto-generated)
         new_internship = Internship(
             title=data.get("title"),
-            category=data.get("category"),
+            category=data.get("category", "Development"),
             duration=data.get("duration"),
             fee=float(data.get("fee", 0)),
             original_fee=float(data.get("original_fee", 0)) if data.get("original_fee") else None,
             stipend=data.get("stipend", "Unpaid"),
             mode=data.get("mode", "Online"),
+            start_date=data.get("start_date", "Monthly Batch"),
             slots=int(data.get("slots", 0)),
             enrolled=int(data.get("enrolled", 0)),
             rating=float(data.get("rating", 4.5)),
@@ -1028,11 +1036,18 @@ def admin_create_internship():
         db.session.add(new_internship)
         db.session.commit()
         
+        # Generate internship_id after commit (so we have the id)
+        new_internship.internship_id = f"INT-{new_internship.id:05d}"
+        db.session.commit()
+        
+        print(f"✅ Internship created: ID={new_internship.id}, Title={new_internship.title}")
+        
         return jsonify({
             "success": True,
             "message": "Internship created successfully",
             "internship": {
                 "id": new_internship.id,
+                "internship_id": new_internship.internship_id,
                 "title": new_internship.title,
                 "category": new_internship.category,
                 "duration": new_internship.duration,
@@ -1043,7 +1058,7 @@ def admin_create_internship():
         
     except Exception as e:
         db.session.rollback()
-        print(f"Error creating internship: {e}")
+        print(f"❌ Error creating internship: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({"success": False, "message": str(e)}), 500
@@ -1064,6 +1079,7 @@ def admin_update_internship(internship_id):
             return jsonify({"success": False, "message": "Internship not found"}), 404
         
         data = request.get_json()
+        print(f"📥 Updating internship {internship_id}:", data)
         
         # Update fields if provided
         if "title" in data:
@@ -1080,6 +1096,8 @@ def admin_update_internship(internship_id):
             internship.stipend = data["stipend"]
         if "mode" in data:
             internship.mode = data["mode"]
+        if "start_date" in data:
+            internship.start_date = data["start_date"]
         if "slots" in data:
             internship.slots = int(data["slots"])
         if "enrolled" in data:
@@ -1110,17 +1128,20 @@ def admin_update_internship(internship_id):
                 requirements = [r.strip() for r in requirements.split(',') if r.strip()]
             internship.requirements = requirements
         
-        # Update timestamp if column exists
+        # Update timestamp
         if hasattr(internship, 'updated_at'):
             internship.updated_at = datetime.utcnow()
         
         db.session.commit()
+        
+        print(f"✅ Internship updated: {internship.id}")
         
         return jsonify({
             "success": True,
             "message": "Internship updated successfully",
             "internship": {
                 "id": internship.id,
+                "internship_id": internship.internship_id,
                 "title": internship.title,
                 "category": internship.category,
                 "duration": internship.duration,
@@ -1131,7 +1152,7 @@ def admin_update_internship(internship_id):
         
     except Exception as e:
         db.session.rollback()
-        print(f"Error updating internship: {e}")
+        print(f"❌ Error updating internship: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({"success": False, "message": str(e)}), 500

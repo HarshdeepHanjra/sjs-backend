@@ -317,6 +317,7 @@ def create_app():
     from app.routes.user import user_bp
     from app.routes.contact import contact_bp
     from app.routes.mentor import mentor_bp
+    from app.routes.admin_students import admin_students_bp
     
     # Register blueprints with consistent /api prefix
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -330,6 +331,7 @@ def create_app():
     app.register_blueprint(attendance_bp, url_prefix='/api')
     app.register_blueprint(contact_bp, url_prefix='/api/contact')
     app.register_blueprint(mentor_bp, url_prefix='/api/mentor')
+    app.register_blueprint(admin_students_bp)
     
     # =====================================================
     # STATIC FILE SERVING
