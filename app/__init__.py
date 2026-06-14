@@ -295,39 +295,22 @@ def create_app():
     os.makedirs('uploads/mentors', exist_ok=True)
     
     # =====================================================
-    # FIXED CORS Configuration - Allow All Origins
+    # CORS Configuration - USE ONLY THIS ONE METHOD
     # =====================================================
     
-    # Allow all origins for CORS (fixes preflight issues)
-    CORS(app, 
-         origins="*",
-         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-         allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept"],
-         supports_credentials=True,
-         expose_headers=["Content-Type", "Authorization"],
-         max_age=3600)
-    
-    # Global after request handler for CORS
-    @app.after_request
-    def after_request(response):
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept,X-Requested-With')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,PATCH,OPTIONS')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response
-    
-    # Handle OPTIONS preflight requests globally
-    @app.route('/<path:path>', methods=['OPTIONS'])
-    def handle_options(path):
-        response = jsonify({'message': 'OK'})
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept,X-Requested-With')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,PATCH,OPTIONS')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        response.headers.add('Access-Control-Max-Age', '3600')
-        return response, 200
+    # Option 1: Simple CORS - Allow all (RECOMMENDED)
+    CORS(app, origins="*")
     
     print(f"✅ CORS configured successfully! (All origins allowed)")
+    
+    # ❌ REMOVE these - They cause duplicate headers:
+    # @app.after_request
+    # def after_request(response):
+    #     ...
+    # 
+    # @app.route('/<path:path>', methods=['OPTIONS'])
+    # def handle_options(path):
+    #     ...
     
     # Initialize extensions with app
     db.init_app(app)
