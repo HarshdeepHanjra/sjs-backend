@@ -8,14 +8,18 @@ from app.models.attendance import Attendance
 from app.utils.decorators import token_required, admin_required
 from datetime import datetime
 
+# Create blueprint WITHOUT url_prefix (will be set in __init__.py)
 admin_students_bp = Blueprint('admin_students', __name__)
 
 
-@admin_students_bp.route("/admin/students", methods=["GET", "OPTIONS"])
+# =====================================================
+# GET all students
+# =====================================================
+@admin_students_bp.route("/students", methods=["GET", "OPTIONS"])
 @token_required
 @admin_required
 def get_all_students():
-    """Get all students (admin only)"""
+    """Get all students"""
     if request.method == "OPTIONS":
         return "", 200
     
@@ -30,7 +34,10 @@ def get_all_students():
         return jsonify({"success": False, "message": str(e)}), 500
 
 
-@admin_students_bp.route("/admin/students/<int:student_id>", methods=["DELETE", "OPTIONS"])
+# =====================================================
+# DELETE student (SINGLE ROUTE - NO DUPLICATES)
+# =====================================================
+@admin_students_bp.route("/students/<int:student_id>", methods=["DELETE", "OPTIONS"])
 @token_required
 @admin_required
 def delete_student(student_id):
@@ -54,25 +61,29 @@ def delete_student(student_id):
         
         print(f"📋 Student found: {student.name} (ID: {student.id})")
         
-        # Delete related data from internship_orders
+        # Delete related data
         deleted_orders = InternshipOrder.query.filter_by(student_id=student_id).delete()
         print(f"   Deleted {deleted_orders} internship orders")
         
-        # Delete from internship_enrollments
         deleted_enrollments = InternshipEnrollment.query.filter_by(student_id=student_id).delete()
         print(f"   Deleted {deleted_enrollments} internship enrollments")
         
-        # Delete from payment_verifications
         deleted_payments = PaymentVerification.query.filter_by(student_id=student_id).delete()
         print(f"   Deleted {deleted_payments} payment verifications")
         
-        # Delete from certificates
+        # Delete certificates
         try:
-            from app.models.certificate import Certificate
             deleted_certs = Certificate.query.filter_by(student_id=student_id).delete()
             print(f"   Deleted {deleted_certs} certificates")
         except Exception as e:
             print(f"   Certificate deletion skipped: {e}")
+        
+        # Delete attendance
+        try:
+            deleted_attendance = Attendance.query.filter_by(student_id=student_id).delete()
+            print(f"   Deleted {deleted_attendance} attendance records")
+        except Exception as e:
+            print(f"   Attendance deletion skipped: {e}")
         
         # Delete the student
         student_name = student.name
@@ -81,12 +92,10 @@ def delete_student(student_id):
         
         print(f"✅ Student '{student_name}' (ID: {student_id}) deleted successfully!")
         
-        response = jsonify({
+        return jsonify({
             "success": True,
             "message": f"Student '{student_name}' and all related data deleted successfully"
-        })
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        return response, 200
+        }), 200
         
     except Exception as e:
         db.session.rollback()
@@ -94,19 +103,20 @@ def delete_student(student_id):
         import traceback
         traceback.print_exc()
         
-        response = jsonify({
+        return jsonify({
             "success": False, 
             "message": f"Error: {str(e)}"
-        })
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        return response, 500
+        }), 500
 
 
-@admin_students_bp.route("/admin/students/<int:student_id>", methods=["PUT", "OPTIONS"])
+# =====================================================
+# UPDATE student
+# =====================================================
+@admin_students_bp.route("/students/<int:student_id>", methods=["PUT", "OPTIONS"])
 @token_required
 @admin_required
 def update_student(student_id):
-    """Update student information (admin only)"""
+    """Update student information"""
     if request.method == "OPTIONS":
         return "", 200
     
@@ -142,11 +152,14 @@ def update_student(student_id):
         return jsonify({"success": False, "message": str(e)}), 500
 
 
-@admin_students_bp.route("/admin/students/<int:student_id>/status", methods=["PATCH", "OPTIONS"])
+# =====================================================
+# TOGGLE student status
+# =====================================================
+@admin_students_bp.route("/students/<int:student_id>/status", methods=["PATCH", "OPTIONS"])
 @token_required
 @admin_required
 def toggle_student_status(student_id):
-    """Toggle student active/inactive status (admin only)"""
+    """Toggle student active/inactive status"""
     if request.method == "OPTIONS":
         return "", 200
     
@@ -175,11 +188,14 @@ def toggle_student_status(student_id):
         return jsonify({"success": False, "message": str(e)}), 500
 
 
-@admin_students_bp.route("/admin/students/bulk-delete", methods=["POST", "OPTIONS"])
+# =====================================================
+# BULK DELETE students
+# =====================================================
+@admin_students_bp.route("/students/bulk-delete", methods=["POST", "OPTIONS"])
 @token_required
 @admin_required
 def bulk_delete_students():
-    """Delete multiple students at once (admin only)"""
+    """Delete multiple students at once"""
     if request.method == "OPTIONS":
         return "", 200
     
@@ -203,13 +219,11 @@ def bulk_delete_students():
                     PaymentVerification.query.filter_by(student_id=student_id).delete()
                     
                     try:
-                        from app.models.certificate import Certificate
                         Certificate.query.filter_by(student_id=student_id).delete()
                     except:
                         pass
                     
                     try:
-                        from app.models.attendance import Attendance
                         Attendance.query.filter_by(student_id=student_id).delete()
                     except:
                         pass
@@ -237,11 +251,14 @@ def bulk_delete_students():
         return jsonify({"success": False, "message": str(e)}), 500
 
 
-@admin_students_bp.route("/admin/students/search", methods=["GET", "OPTIONS"])
+# =====================================================
+# SEARCH students
+# =====================================================
+@admin_students_bp.route("/students/search", methods=["GET", "OPTIONS"])
 @token_required
 @admin_required
 def search_students():
-    """Search students by name, email, or student_id (admin only)"""
+    """Search students by name, email, or student_id"""
     if request.method == "OPTIONS":
         return "", 200
     

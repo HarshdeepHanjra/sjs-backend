@@ -570,7 +570,7 @@ def create_app():
     app.register_blueprint(attendance_bp, url_prefix='/api')
     app.register_blueprint(contact_bp, url_prefix='/api/contact')
     app.register_blueprint(mentor_bp, url_prefix='/api/mentor')
-    app.register_blueprint(admin_students_bp)
+    app.register_blueprint(admin_students_bp, url_prefix='/api/admin')
     
     # =====================================================
     # STATIC FILE SERVING
