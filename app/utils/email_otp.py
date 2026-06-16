@@ -199,20 +199,29 @@ def send_email_otp(email, otp, user_type="student"):
     
     try:
         subject = (
-            "🔐 Admin Login OTP - SJS Global Tech Academy"
+            "🔐 Admin Login OTP - SJS Global Tech"  # ✅ Removed "Academy"
             if user_type == "admin"
-            else "🔐 Email Verification OTP - SJS Global Tech Academy"
+            else "🔐 Email Verification OTP - SJS Global Tech"  # ✅ Removed "Academy"
         )
 
         # ✅ FIX: Use domain email instead of Gmail
         payload = {
             "sender": {
-                "name": "SJS Global Tech Academy",
+                "name": "SJS Global Tech",  # ✅ Sirf company name
                 "email": "noreply@sjsglobaltech.com",  # ✅ Domain verified email
             },
             "to": [{"email": email}],
             "subject": subject,
-            "htmlContent": f"<html><body><h1>Your OTP is: {otp}</h1><p>Valid for 10 minutes.</p></body></html>",
+            "htmlContent": f"""
+            <html>
+            <body>
+                <h2>SJS Global Tech</h2>
+                <h3>Your OTP is: <strong>{otp}</strong></h3>
+                <p>Valid for 10 minutes.</p>
+                <p>Regards,<br>SJS Global Tech Team</p>
+            </body>
+            </html>
+            """,
         }
 
         headers = {
