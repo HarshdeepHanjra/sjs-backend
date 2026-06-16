@@ -1197,7 +1197,7 @@ def admin_login():
         
         print(f"Admin login attempt: {email}")
         
-        if email == 'admin@sjsacademy.com' and password == 'Admin@123':
+        if email == ADMIN_EMAIL and password == 'Admin@123':
             
             # First step - password verified, need OTP
             if not otp and not session_id:
