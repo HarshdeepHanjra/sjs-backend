@@ -1079,7 +1079,6 @@
 
 
 
-
 import cloudinary
 import cloudinary.uploader
 from flask import Blueprint, request, jsonify, current_app
@@ -1111,7 +1110,7 @@ MAIL_PASSWORD = os.getenv('MAIL_PASSWORD', '')
 MAIL_DEFAULT_SENDER = os.getenv('MAIL_DEFAULT_SENDER', 'sjsglobaltech@gmail.com')
 BREVO_API_KEY = os.getenv('BREVO_API_KEY', '')
 USE_REAL_EMAIL = os.getenv('USE_REAL_EMAIL', 'True').lower() == 'true'
-ADMIN_EMAIL = os.getenv('ADMIN_EMAIL', 'sjsglobaltech@gmail.com')
+ADMIN_EMAIL = os.getenv('ADMIN_EMAIL', 'gangahanjra@gmail.com')  # Changed to gangahanjra@gmail.com
 
 # Cloudinary configuration
 CLOUDINARY_CLOUD_NAME = os.getenv('CLOUDINARY_CLOUD_NAME', 'dxxpeilta')
@@ -1179,7 +1178,12 @@ def send_email_brevo_api(to_email, subject, html_content, text_content=None):
             "content-type": "application/json"
         }
         
+        print(f"📤 Sending email via Brevo API to: {to_email}")
+        print(f"   Subject: {subject}")
+        
         response = requests.post(url, json=payload, headers=headers, timeout=30)
+        
+        print(f"📥 Brevo API Response Status: {response.status_code}")
         
         if response.status_code in [200, 201]:
             print(f"✅ Email sent via Brevo API to {to_email}")
@@ -1204,6 +1208,9 @@ def send_email_smtp(to_email, subject, html_content, text_content=None):
         if not MAIL_USERNAME or not MAIL_PASSWORD:
             print("⚠️ SMTP credentials not configured")
             return False
+        
+        print(f"📤 Sending email via SMTP to: {to_email}")
+        print(f"   Subject: {subject}")
         
         # Create message
         msg = MIMEMultipart('alternative')
@@ -1236,7 +1243,7 @@ def send_admin_notification_email(student_name, student_email, order_id, amount,
     
     # Prepare course list HTML
     courses_html = ""
-    total_amount = amount
+    course_names = []
     for course in courses:
         if isinstance(course, dict):
             course_name = course.get('name', 'Unknown Course')
@@ -1244,15 +1251,19 @@ def send_admin_notification_email(student_name, student_email, order_id, amount,
         else:
             course_name = getattr(course, 'name', 'Unknown Course')
             course_price = getattr(course, 'price', 0)
+        course_names.append(course_name)
         courses_html += f"""
         <tr>
-            <td style="padding: 8px; border-bottom: 1px solid #e0e0e0;">{course_name}</td>
-            <td style="padding: 8px; border-bottom: 1px solid #e0e0e0; text-align: right;">₹{course_price:,.2f}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #e0e0e0;">{course_name}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; text-align: right;">₹{course_price:,.2f}</td>
         </tr>
         """
     
+    # Course names as comma separated string
+    course_names_str = ", ".join(course_names)
+    
     # Email subject
-    subject = f"🔔 New Payment Verification Request - Order #{order_id}"
+    subject = f"🔔 New Payment Request from {student_name} - Order #{order_id}"
     
     # Email body (HTML)
     html_body = f"""
@@ -1262,58 +1273,67 @@ def send_admin_notification_email(student_name, student_email, order_id, amount,
         <style>
             body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
             .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-            .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }}
-            .content {{ background: #f9f9f9; padding: 20px; border-radius: 0 0 10px 10px; }}
+            .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 25px; text-align: center; border-radius: 10px 10px 0 0; }}
+            .header h2 {{ margin: 0; }}
+            .content {{ background: #f9f9f9; padding: 25px; border-radius: 0 0 10px 10px; }}
             .info-box {{ background: white; padding: 15px; margin: 15px 0; border-radius: 8px; border-left: 4px solid #667eea; }}
             .label {{ font-weight: bold; color: #555; }}
             .amount {{ font-size: 24px; font-weight: bold; color: #667eea; }}
             table {{ width: 100%; border-collapse: collapse; margin: 10px 0; }}
             th {{ background: #667eea; color: white; padding: 10px; text-align: left; }}
-            .button {{ display: inline-block; padding: 10px 20px; background: #667eea; color: white; text-decoration: none; border-radius: 5px; margin-top: 15px; }}
             .footer {{ text-align: center; padding: 15px; font-size: 12px; color: #999; }}
+            .highlight {{ background: #e8f5e9; padding: 15px; border-radius: 8px; margin: 15px 0; }}
         </style>
     </head>
     <body>
         <div class="container">
             <div class="header">
                 <h2>🎓 SJS Global Tech Academy</h2>
-                <p>New Payment Verification Request</p>
+                <p style="margin: 5px 0 0 0;">New Payment Verification Request</p>
             </div>
             <div class="content">
-                <h3>📋 Payment Details</h3>
+                <div class="highlight">
+                    <p style="margin: 0; font-size: 16px;"><strong>📢 Student:</strong> {student_name} has submitted a payment request</p>
+                </div>
+                
+                <h3>📋 Student & Payment Details</h3>
                 
                 <div class="info-box">
-                    <p><span class="label">👤 Student Name:</span> {student_name}</p>
-                    <p><span class="label">📧 Student Email:</span> {student_email}</p>
-                    <p><span class="label">🆔 Order ID:</span> {order_id}</p>
+                    <p><span class="label">👤 Student Name:</span> <strong>{student_name}</strong></p>
+                    <p><span class="label">📧 Student Email:</span> <strong>{student_email}</strong></p>
+                    <p><span class="label">🆔 Order ID:</span> <strong>{order_id}</strong></p>
                     <p><span class="label">💰 Total Amount:</span> <span class="amount">₹{amount:,.2f}</span></p>
-                    <p><span class="label">💳 Payment Method:</span> {payment_method.upper()}</p>
+                    <p><span class="label">💳 Payment Method:</span> <strong>{payment_method.upper()}</strong></p>
                     <p><span class="label">🔢 Transaction ID:</span> <strong>{transaction_id}</strong></p>
                     <p><span class="label">⏰ Submitted At:</span> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
                 </div>
                 
                 <h3>📚 Courses Purchased</h3>
+                <div style="background: white; padding: 5px 15px; border-radius: 8px;">
+                    <p style="font-size: 14px; color: #555;"><strong>Total Courses:</strong> {len(course_names)}</p>
+                    <p style="font-size: 14px; color: #555;"><strong>Course Names:</strong> {course_names_str}</p>
+                </div>
                 <table>
                     <thead>
                         <tr><th>Course Name</th><th>Price</th></tr>
                     </thead>
                     <tbody>
                         {courses_html}
-                        <tr style="background: #f0f0f0;">
-                            <td style="padding: 10px;"><strong>Total</strong></td>
-                            <td style="padding: 10px; text-align: right;"><strong>₹{amount:,.2f}</strong></td>
+                        <tr style="background: #f0f0f0; font-weight: bold;">
+                            <td style="padding: 10px;">Total</td>
+                            <td style="padding: 10px; text-align: right;">₹{amount:,.2f}</td>
                         </tr>
                     </tbody>
                 </table>
                 
                 <h3>📸 Payment Screenshot</h3>
                 <div class="info-box">
-                    <p>Screenshot URL: <a href="{screenshot_url}" target="_blank">View Screenshot</a></p>
+                    <p><a href="{screenshot_url}" target="_blank" style="color: #667eea; font-weight: bold;">📷 View Screenshot</a></p>
                     <p style="font-size: 12px; color: #666;">Click the link above to view the payment proof.</p>
                 </div>
                 
-                <div style="background: #fff3cd; padding: 10px; border-radius: 5px; margin-top: 15px; border-left: 4px solid #ffc107;">
-                    <p style="margin: 0; font-size: 13px;">💡 <strong>Action Required:</strong> Please review this payment request in the admin panel and approve or decline it.</p>
+                <div style="background: #fff3cd; padding: 15px; border-radius: 5px; margin-top: 15px; border-left: 4px solid #ffc107;">
+                    <p style="margin: 0; font-size: 14px;">💡 <strong>Action Required:</strong> Please login to admin panel to approve or decline this payment request.</p>
                 </div>
             </div>
             <div class="footer">
@@ -1337,21 +1357,32 @@ def send_admin_notification_email(student_name, student_email, order_id, amount,
     Transaction ID: {transaction_id}
     Submitted At: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
     
-    Courses:
-    {chr(10).join([f"- {c.get('name') if isinstance(c, dict) else getattr(c, 'name')}: ₹{c.get('price') if isinstance(c, dict) else getattr(c, 'price'):,.2f}" for c in courses])}
+    Courses ({len(course_names)}):
+    {chr(10).join([f"  • {c}" for c in course_names])}
     
     Screenshot URL: {screenshot_url}
     
     Please review in admin panel.
     """
     
+    print(f"📧 Sending admin notification to: {ADMIN_EMAIL}")
+    print(f"   Student: {student_name}")
+    print(f"   Courses: {course_names_str}")
+    
     # Send to admin email
-    return send_email_brevo_api(
+    result = send_email_brevo_api(
         to_email=ADMIN_EMAIL,
         subject=subject,
         html_content=html_body,
         text_content=text_body
     )
+    
+    if result:
+        print(f"✅ Admin notification sent successfully to {ADMIN_EMAIL}")
+    else:
+        print(f"❌ Failed to send admin notification to {ADMIN_EMAIL}")
+    
+    return result
 
 
 def send_student_confirmation_email(student_name, student_email, order_id, amount, courses):
@@ -1452,7 +1483,7 @@ def get_bank_details():
         'bank_name': os.getenv('BANK_NAME', 'State Bank of India'),
         'ifsc_code': os.getenv('BANK_IFSC_CODE', 'SBIN0012345'),
         'branch': os.getenv('BANK_BRANCH', 'Main Branch'),
-        'upi_id': os.getenv('UPI_ID', 'sjsacademy@okhdfcbank')
+        'upi_id': os.getenv('UPI_ID', 'gurmeetsingh1021981-1@okaxis')
     }
     
     return jsonify({
@@ -1674,10 +1705,21 @@ def submit_verification():
         
         print(f"✅ Verification submitted: {verification_id} via {payment_method}")
         
-        # 📧 SEND EMAIL NOTIFICATION TO ADMIN
+        # 📧 SEND EMAIL NOTIFICATION TO ADMIN (gangahanjra@gmail.com)
+        student_name = student.name if student else user.get('name', 'Student')
+        student_email = student.email if student else user.get('email')
+        
+        print(f"\n📧 Sending payment notification for:")
+        print(f"   Student: {student_name}")
+        print(f"   Student Email: {student_email}")
+        print(f"   Order ID: {order_id}")
+        print(f"   Amount: ₹{amount:,.2f}")
+        print(f"   Payment Method: {payment_method}")
+        print(f"   Courses: {len(courses_list)} courses")
+        
         send_admin_notification_email(
-            student_name=student.name if student else user.get('name', 'Student'),
-            student_email=student.email if student else user.get('email'),
+            student_name=student_name,
+            student_email=student_email,
             order_id=order_id,
             amount=amount,
             transaction_id=transaction_id,
@@ -1694,7 +1736,9 @@ def submit_verification():
         
     except Exception as e:
         db.session.rollback()
-        print(f"Submit error: {e}")
+        print(f"❌ Submit error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
