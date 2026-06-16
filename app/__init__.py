@@ -213,7 +213,6 @@
 #     return app
 
 
-
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
@@ -291,50 +290,40 @@ def create_app():
     os.makedirs('uploads/mentors', exist_ok=True)
     
     # =====================================================
-    # ✅ CORS Configuration - COMPLETE FIX
+    # ✅ CORS Configuration - SINGLE SOURCE
     # =====================================================
     
-    # ✅ Updated CORS origins
-    CORS_ORIGINS = [
-        "https://sjs-frontend-delta.vercel.app",
-        "https://sjs-frontend-delta.vercel.app/",
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://localhost:5000",
-        "*"  # For development (remove in production)
-    ]
-    
-    # Enable CORS for all routes with proper configuration
+    # ✅ Sirf CORS(app) use karein - @app.after_request HATANA HAI
     CORS(app, 
-         origins=CORS_ORIGINS,
+         origins=["https://sjs-frontend-delta.vercel.app"],
          methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-         allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With", "Origin"],
+         allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With"],
          expose_headers=["Content-Type", "Authorization"],
          supports_credentials=True,
          max_age=3600)
     
-    # ✅ Manual OPTIONS handler for all routes (backup)
+    print(f"✅ CORS configured for: https://sjs-frontend-delta.vercel.app")
+    
+    # ❌ YE HATANA HAI - Duplicate CORS headers cause error
+    # @app.after_request
+    # def after_request(response):
+    #     response.headers.add('Access-Control-Allow-Origin', 'https://sjs-frontend-delta.vercel.app')
+    #     response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept')
+    #     response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS,PATCH')
+    #     response.headers.add('Access-Control-Allow-Credentials', 'true')
+    #     return response
+    
+    # ✅ Sirf OPTIONS handler rakhein (CORS ke liye)
     @app.before_request
     def handle_preflight():
         if request.method == "OPTIONS":
             response = app.make_default_options_response()
             response.headers.add("Access-Control-Allow-Origin", "https://sjs-frontend-delta.vercel.app")
-            response.headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Origin, X-Requested-With")
+            response.headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept")
             response.headers.add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
             response.headers.add("Access-Control-Allow-Credentials", "true")
             response.headers.add("Access-Control-Max-Age", "3600")
             return response
-    
-    # ✅ After request handler (backup)
-    @app.after_request
-    def after_request(response):
-        response.headers.add('Access-Control-Allow-Origin', 'https://sjs-frontend-delta.vercel.app')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept,Origin')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS,PATCH')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response
-    
-    print(f"✅ CORS configured successfully for: {CORS_ORIGINS}")
     
     # Initialize extensions with app
     db.init_app(app)
@@ -437,16 +426,11 @@ def create_app():
     def health():
         return jsonify({'status': 'ok', 'message': 'Server is healthy'})
     
-    # =====================================================
     # ✅ CORS Test Endpoint
-    # =====================================================
     @app.route('/api/test-cors', methods=['GET', 'OPTIONS'])
     def test_cors():
         if request.method == 'OPTIONS':
             response = jsonify({'status': 'ok'})
-            response.headers.add('Access-Control-Allow-Origin', 'https://sjs-frontend-delta.vercel.app')
-            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-            response.headers.add('Access-Control-Allow-Methods', 'GET,OPTIONS')
             return response
         return jsonify({'status': 'ok', 'message': 'CORS is working!'})
     
