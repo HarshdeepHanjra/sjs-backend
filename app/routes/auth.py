@@ -1193,23 +1193,16 @@ def admin_login():
         otp = data.get('otp')
         session_id = data.get('session_id')
         
-        # ✅ Admin email jis pe OTP bhejna hai
         ADMIN_EMAIL = "harshdeephanjra22@gmail.com"
         
-        # ✅ Admin login credentials (jo form me type karega)
-        ADMIN_LOGIN_EMAIL = "admin@sjsacademy.com"
-        ADMIN_LOGIN_PASSWORD = "Admin@123"
-        
         print(f"Admin login attempt: {email}")
-        print(f"OTP will be sent to: {ADMIN_EMAIL}")
         
-        # ✅ Step 1: Check credentials (form email se match karega)
-        if email == ADMIN_LOGIN_EMAIL and password == ADMIN_LOGIN_PASSWORD:
+        if email == 'admin@sjsacademy.com' and password == 'Admin@123':
             
             # First step - password verified, need OTP
             if not otp and not session_id:
                 session_id = str(uuid.uuid4())
-                success, otp_code = send_otp(ADMIN_EMAIL, 'admin')  # ✅ OTP ADMIN_EMAIL pe jayega
+                success, otp_code = send_otp(ADMIN_EMAIL, 'admin')
                 
                 if success:
                     if not hasattr(current_app, 'login_sessions'):
@@ -1222,8 +1215,7 @@ def admin_login():
                         'expires_at': datetime.utcnow() + timedelta(minutes=10)
                     }
                     
-                    print(f"✅ Admin OTP sent to: {ADMIN_EMAIL}")
-                    print(f"📝 OTP Code: {otp_code}")
+                    print(f"Admin OTP sent to: {ADMIN_EMAIL}")
                     
                     return jsonify({
                         'requires_otp': True,
@@ -1231,7 +1223,6 @@ def admin_login():
                         'message': f'OTP sent to {ADMIN_EMAIL}'
                     }), 200
                 else:
-                    print(f"❌ Failed to send OTP to: {ADMIN_EMAIL}")
                     return jsonify({'error': 'Failed to send OTP. Please try again.'}), 500
             
             # Second step - Verify OTP
@@ -1245,7 +1236,6 @@ def admin_login():
                     del current_app.login_sessions[session_id]
                     return jsonify({'error': 'Session expired. Please login again.'}), 401
                 
-                # ✅ Verify OTP (ADMIN_EMAIL ke against)
                 if verify_otp(session_data['email'], otp):
                     del current_app.login_sessions[session_id]
                     
@@ -1255,7 +1245,7 @@ def admin_login():
                         {
                             'id': 1, 
                             'role': 'admin', 
-                            'email': ADMIN_EMAIL, 
+                            'email': email, 
                             'is_admin': True,
                             'exp': datetime.utcnow() + timedelta(days=30)
                         },
@@ -1263,26 +1253,22 @@ def admin_login():
                         algorithm='HS256'
                     )
                     
-                    print(f"✅ Admin login successful: {ADMIN_EMAIL}")
-                    
                     return jsonify({
                         'success': True,
                         'access_token': token,
                         'admin': {
                             'id': 1, 
                             'username': 'admin', 
-                            'email': ADMIN_EMAIL, 
+                            'email': email, 
                             'full_name': 'Super Admin', 
                             'role': 'super'
                         }
                     }), 200
                 else:
-                    print(f"❌ Invalid OTP for: {ADMIN_EMAIL}")
                     return jsonify({'error': 'Invalid or expired OTP'}), 401
             else:
                 return jsonify({'error': 'Invalid request'}), 400
         
-        print(f"❌ Invalid credentials for: {email}")
         return jsonify({'error': 'Invalid credentials'}), 401
         
     except Exception as e:
