@@ -1875,6 +1875,166 @@ def get_payment_requests():
         return jsonify({'error': str(e)}), 500
 
 
+# @payments_bp.route('/admin/payment-requests/<int:request_id>/approve', methods=['POST', 'OPTIONS'])
+# @admin_required
+# def approve_payment(request_id):
+#     """Approve payment verification (Admin)"""
+#     if request.method == 'OPTIONS':
+#         return '', 200
+    
+#     try:
+#         data = request.get_json()
+#         admin_notes = data.get('notes', 'Payment verified and approved.')
+        
+#         # Get verification record
+#         verification = PaymentVerification.query.get(request_id)
+#         if not verification:
+#             return jsonify({'error': 'Verification not found'}), 404
+        
+#         # Update verification status
+#         verification.status = 'approved'
+#         verification.admin_notes = admin_notes
+#         verification.verified_at = datetime.utcnow()
+        
+#         # Get the order
+#         order = Order.query.filter_by(order_id=verification.order_id).first()
+#         if not order:
+#             # Check if it's an internship order
+#             internship_order = InternshipOrder.query.filter_by(order_id=verification.order_id).first()
+#             if internship_order:
+#                 internship_order.payment_status = 'completed'
+#                 internship_order.status = 'active'
+#                 db.session.commit()
+                
+#                 # Send confirmation email to student
+#                 send_student_confirmation_email(
+#                     student_name=verification.student_name,
+#                     student_email=verification.student_email,
+#                     order_id=verification.order_id,
+#                     amount=verification.amount,
+#                     courses=[{'name': internship_order.internship_title, 'price': verification.amount}]
+#                 )
+                
+#                 return jsonify({
+#                     'success': True,
+#                     'message': 'Internship payment approved successfully!'
+#                 }), 200
+#             return jsonify({'error': 'Order not found'}), 404
+        
+#         # Update order status
+#         order.payment_status = 'completed'
+#         order.transaction_id = verification.transaction_id
+        
+#         # Get courses from order
+#         order_courses = order.courses if isinstance(order.courses, list) else []
+        
+#         print(f"\n{'='*60}")
+#         print(f"📝 APPROVING PAYMENT - Adding to Enrollment")
+#         print(f"Order ID: {order.order_id}")
+#         print(f"Student ID: {verification.student_id}")
+#         print(f"Student Email: {verification.student_email}")
+#         print(f"Payment Method: {getattr(verification, 'payment_method', 'upi')}")
+#         print(f"Order Courses: {order_courses}")
+#         print(f"{'='*60}\n")
+        
+#         # Import models
+#         from app.models.course import Enrollment, Course
+        
+#         courses_added = []
+        
+#         # For each course in the order, add to enrollments table
+#         for course_data in order_courses:
+#             # Get course ID
+#             if isinstance(course_data, dict):
+#                 course_id = course_data.get('id')
+#                 course_name = course_data.get('name', 'Unknown')
+#             else:
+#                 course_id = getattr(course_data, 'id', None)
+#                 course_name = getattr(course_data, 'name', 'Unknown')
+            
+#             if course_id:
+#                 print(f"Processing course ID: {course_id} - {course_name}")
+                
+#                 # Check if already enrolled
+#                 existing = Enrollment.query.filter_by(
+#                     student_id=verification.student_id,
+#                     course_id=course_id
+#                 ).first()
+                
+#                 if not existing:
+#                     # Create enrollment
+#                     enrollment = Enrollment(
+#                         student_id=verification.student_id,
+#                         course_id=course_id,
+#                         enrolled_at=datetime.utcnow(),
+#                         status='active',
+#                         payment_verification_id=verification.verification_id
+#                     )
+#                     db.session.add(enrollment)
+#                     courses_added.append(course_id)
+#                     print(f"✅ Added to enrollments table: student_id={verification.student_id}, course_id={course_id}")
+                    
+#                     # Update student's course_ids JSON field
+#                     student = Student.query.get(verification.student_id)
+#                     if student:
+#                         if student.course_ids is None:
+#                             student.course_ids = []
+#                         if course_id not in student.course_ids:
+#                             student.course_ids.append(course_id)
+#                             print(f"✅ Added course {course_id} to student.course_ids")
+                    
+#                     # Update course student count
+#                     course = Course.query.get(course_id)
+#                     if course:
+#                         course.students_enrolled = (course.students_enrolled or 0) + 1
+#                         db.session.add(course)
+#                         print(f"✅ Updated course {course_id} students_enrolled to {course.students_enrolled}")
+#                 else:
+#                     print(f"⚠️ Already enrolled in course {course_id}")
+        
+#         # Commit all changes
+#         db.session.commit()
+        
+#         # Send confirmation email to student
+#         send_student_confirmation_email(
+#             student_name=verification.student_name,
+#             student_email=verification.student_email,
+#             order_id=verification.order_id,
+#             amount=verification.amount,
+#             courses=order_courses
+#         )
+        
+#         # Verify enrollment was added
+#         verify_enrollments = Enrollment.query.filter_by(
+#             student_id=verification.student_id
+#         ).all()
+        
+#         print(f"\n📊 Enrollment Summary:")
+#         print(f"   Total enrollments for student {verification.student_id}: {len(verify_enrollments)}")
+#         for enc in verify_enrollments:
+#             print(f"   - Course ID: {enc.course_id}, Status: {enc.status}")
+        
+#         print(f"\n✅ Payment approved successfully!")
+#         print(f"   Courses added: {courses_added}")
+#         print(f"   Email sent to: {verification.student_email}")
+#         print(f"{'='*60}\n")
+        
+#         return jsonify({
+#             'success': True,
+#             'message': 'Payment approved successfully! Courses added to student account.',
+#             'courses_added': courses_added,
+#             'total_enrollments': len(verify_enrollments)
+#         }), 200
+        
+#     except Exception as e:
+#         db.session.rollback()
+#         print(f"❌ Approve error: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         return jsonify({'error': str(e)}), 500
+
+
+
 @payments_bp.route('/admin/payment-requests/<int:request_id>/approve', methods=['POST', 'OPTIONS'])
 @admin_required
 def approve_payment(request_id):
@@ -1995,14 +2155,23 @@ def approve_payment(request_id):
         # Commit all changes
         db.session.commit()
         
-        # Send confirmation email to student
-        send_student_confirmation_email(
+        # ✅ Send confirmation email to student
+        print(f"\n📧 Sending confirmation email to: {verification.student_email}")
+        print(f"   Student: {verification.student_name}")
+        print(f"   Courses: {len(order_courses)} courses added")
+        
+        email_sent = send_student_confirmation_email(
             student_name=verification.student_name,
             student_email=verification.student_email,
             order_id=verification.order_id,
             amount=verification.amount,
             courses=order_courses
         )
+        
+        if email_sent:
+            print(f"✅ Confirmation email sent to: {verification.student_email}")
+        else:
+            print(f"❌ Failed to send confirmation email to: {verification.student_email}")
         
         # Verify enrollment was added
         verify_enrollments = Enrollment.query.filter_by(
@@ -2032,6 +2201,7 @@ def approve_payment(request_id):
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
 
 
 @payments_bp.route('/admin/payment-requests/<int:request_id>/decline', methods=['POST', 'OPTIONS'])
