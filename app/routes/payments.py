@@ -1080,7 +1080,6 @@
 
 
 
-
 import cloudinary
 import cloudinary.uploader
 from flask import Blueprint, request, jsonify, current_app
@@ -1098,12 +1097,11 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import requests
-import sib_api_v3_sdk
-from sib_api_v3_sdk.rest import ApiException
+import json
 
 payments_bp = Blueprint('payments', __name__)
 
-# Email Configuration (Brevo/Sendinblue)
+# Email Configuration (from your settings)
 MAIL_SERVER = os.getenv('MAIL_SERVER', 'smtp-relay.brevo.com')
 MAIL_PORT = int(os.getenv('MAIL_PORT', 587))
 MAIL_USE_TLS = os.getenv('MAIL_USE_TLS', 'True').lower() == 'true'
@@ -1142,7 +1140,7 @@ CLOUDINARY_ENABLED = init_cloudinary()
 # =====================================================
 
 def send_email_brevo_api(to_email, subject, html_content, text_content=None):
-    """Send email using Brevo API (Sendinblue)"""
+    """Send email using Brevo API (Sendinblue) - without external SDK"""
     if not USE_REAL_EMAIL:
         print(f"📧 [TEST MODE] Would send email to: {to_email}")
         print(f"   Subject: {subject}")
@@ -1154,37 +1152,45 @@ def send_email_brevo_api(to_email, subject, html_content, text_content=None):
         return send_email_smtp(to_email, subject, html_content, text_content)
     
     try:
-        # Configure API key authorization
-        configuration = sib_api_v3_sdk.Configuration()
-        configuration.api_key['api-key'] = BREVO_API_KEY
+        # Use Brevo API directly with requests
+        url = "https://api.brevo.com/v3/smtp/email"
         
-        # Create an instance of the API class
-        api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
+        payload = {
+            "sender": {
+                "name": "SJS Global Tech Academy",
+                "email": MAIL_DEFAULT_SENDER
+            },
+            "to": [
+                {
+                    "email": to_email,
+                    "name": to_email.split('@')[0]
+                }
+            ],
+            "subject": subject,
+            "htmlContent": html_content
+        }
         
-        # Create email object
-        sender = {"email": MAIL_DEFAULT_SENDER, "name": "SJS Global Tech Academy"}
-        to = [{"email": to_email}]
+        if text_content:
+            payload["textContent"] = text_content
         
-        send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
-            to=to,
-            sender=sender,
-            subject=subject,
-            html_content=html_content,
-            text_content=text_content or html_content.replace('<', '&lt;').replace('>', '&gt;')
-        )
+        headers = {
+            "accept": "application/json",
+            "api-key": BREVO_API_KEY,
+            "content-type": "application/json"
+        }
         
-        # Send email
-        api_response = api_instance.send_transac_email(send_smtp_email)
-        print(f"✅ Email sent via Brevo API to {to_email}. Message ID: {api_response.message_id}")
-        return True
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
         
-    except ApiException as e:
-        print(f"❌ Brevo API error: {e}")
-        # Fallback to SMTP
-        return send_email_smtp(to_email, subject, html_content, text_content)
+        if response.status_code in [200, 201]:
+            print(f"✅ Email sent via Brevo API to {to_email}")
+            return True
+        else:
+            print(f"❌ Brevo API error: {response.status_code} - {response.text}")
+            return send_email_smtp(to_email, subject, html_content, text_content)
+            
     except Exception as e:
-        print(f"❌ Email error: {e}")
-        return False
+        print(f"❌ Brevo API error: {e}")
+        return send_email_smtp(to_email, subject, html_content, text_content)
 
 
 def send_email_smtp(to_email, subject, html_content, text_content=None):
@@ -1230,6 +1236,7 @@ def send_admin_notification_email(student_name, student_email, order_id, amount,
     
     # Prepare course list HTML
     courses_html = ""
+    total_amount = amount
     for course in courses:
         if isinstance(course, dict):
             course_name = course.get('name', 'Unknown Course')
@@ -1303,10 +1310,6 @@ def send_admin_notification_email(student_name, student_email, order_id, amount,
                 <div class="info-box">
                     <p>Screenshot URL: <a href="{screenshot_url}" target="_blank">View Screenshot</a></p>
                     <p style="font-size: 12px; color: #666;">Click the link above to view the payment proof.</p>
-                </div>
-                
-                <div style="text-align: center;">
-                    <a href="https://sjs-admin-panel.vercel.app/payment-requests" class="button">📋 View in Admin Panel</a>
                 </div>
                 
                 <div style="background: #fff3cd; padding: 10px; border-radius: 5px; margin-top: 15px; border-left: 4px solid #ffc107;">
