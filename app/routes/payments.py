@@ -499,7 +499,6 @@
 
 
 
-
 import cloudinary
 import cloudinary.uploader
 from flask import Blueprint, request, jsonify, current_app
@@ -513,37 +512,8 @@ from app.utils.decorators import token_required, admin_required
 import os
 from werkzeug.utils import secure_filename
 from datetime import datetime
-import uuid
-import requests
-import hashlib
-import hmac
-import json as json_lib
 
 payments_bp = Blueprint('payments', __name__)
-
-# =====================================================
-# CASHFREE CONFIGURATION - SANDBOX MODE
-# =====================================================
-CASHFREE_APP_ID = os.getenv('CASHFREE_APP_ID', '')
-CASHFREE_SECRET_KEY = os.getenv('CASHFREE_SECRET_KEY', '')
-CASHFREE_ENVIRONMENT = os.getenv('CASHFREE_ENVIRONMENT', 'sandbox')  # Default to sandbox
-CASHFREE_AVAILABLE = False
-
-print(f"🔧 Cashfree Config Check:")
-print(f"   APP_ID: {'✅ Set' if CASHFREE_APP_ID else '❌ Missing'}")
-print(f"   SECRET_KEY: {'✅ Set' if CASHFREE_SECRET_KEY else '❌ Missing'}")
-print(f"   ENVIRONMENT: {CASHFREE_ENVIRONMENT}")
-
-if CASHFREE_APP_ID and CASHFREE_SECRET_KEY:
-    CASHFREE_AVAILABLE = True
-    if CASHFREE_ENVIRONMENT == 'production':
-        CASHFREE_API_URL = "https://api.cashfree.com/pg"
-    else:
-        CASHFREE_API_URL = "https://sandbox.cashfree.com/pg"  # Sandbox URL
-    print(f"✅ Cashfree configured in {CASHFREE_ENVIRONMENT.upper()} mode")
-    print(f"   API URL: {CASHFREE_API_URL}")
-else:
-    print("⚠️ Cashfree not configured. Set CASHFREE_APP_ID and CASHFREE_SECRET_KEY")
 
 # Cloudinary configuration
 CLOUDINARY_CLOUD_NAME = os.getenv('CLOUDINARY_CLOUD_NAME', 'dxxpeilta')
@@ -551,6 +521,7 @@ CLOUDINARY_API_KEY = os.getenv('CLOUDINARY_API_KEY', '375175513582196')
 CLOUDINARY_API_SECRET = os.getenv('CLOUDINARY_API_SECRET')
 
 def init_cloudinary():
+    """Initialize Cloudinary if credentials are available"""
     if CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET:
         cloudinary.config(
             cloud_name=CLOUDINARY_CLOUD_NAME,
@@ -567,57 +538,12 @@ CLOUDINARY_ENABLED = init_cloudinary()
 
 
 # =====================================================
-# GET AVAILABLE PAYMENT METHODS
+# BANK DETAILS ENDPOINT
 # =====================================================
-
-@payments_bp.route('/payment-methods', methods=['GET', 'OPTIONS'])
-def get_payment_methods():
-    if request.method == 'OPTIONS':
-        return '', 200
-    
-    payment_methods = [
-        {
-            'id': 'upi',
-            'name': 'UPI (Google Pay / PhonePe / Paytm)',
-            'description': 'Instant access after payment submission',
-            'icon': 'mobile-alt',
-            'currency': 'INR',
-            'is_available': True,
-            'requires_screenshot': True
-        },
-        {
-            'id': 'bank_transfer',
-            'name': 'Bank Transfer / NEFT / RTGS',
-            'description': 'Manual verification (24-48 hours)',
-            'icon': 'university',
-            'currency': 'INR',
-            'is_available': True,
-            'requires_screenshot': True
-        }
-    ]
-    
-    # Always show Cashfree in sandbox for testing
-    payment_methods.append({
-        'id': 'cashfree',
-        'name': 'Cards / NetBanking / UPI (Test Mode)',
-        'description': 'Test payments with sandbox - Use test card: 4111 1111 1111 1111',
-        'icon': 'credit-card',
-        'currency': 'INR',
-        'is_available': True,
-        'requires_screenshot': False,
-        'is_online': True,
-        'is_sandbox': CASHFREE_ENVIRONMENT == 'sandbox'
-    })
-    
-    return jsonify({
-        'success': True,
-        'payment_methods': payment_methods,
-        'environment': CASHFREE_ENVIRONMENT
-    }), 200
-
 
 @payments_bp.route('/bank-details', methods=['GET', 'OPTIONS'])
 def get_bank_details():
+    """Get bank transfer details for manual payment"""
     if request.method == 'OPTIONS':
         return '', 200
     
@@ -637,316 +563,54 @@ def get_bank_details():
 
 
 # =====================================================
-# CASHFREE PAYMENT ROUTES - SANDBOX OPTIMIZED
+# PAYMENT METHODS ENDPOINT
 # =====================================================
 
-@payments_bp.route('/create-cashfree-order', methods=['POST', 'OPTIONS'])
-@token_required
-def create_cashfree_order():
-    """Create Cashfree order for online payments"""
+@payments_bp.route('/payment-methods', methods=['GET', 'OPTIONS'])
+def get_payment_methods():
+    """Get all available payment methods"""
     if request.method == 'OPTIONS':
         return '', 200
     
-    try:
-        if not CASHFREE_AVAILABLE:
-            return jsonify({'error': 'Cashfree not configured. Please contact support.'}), 400
-        
-        data = request.get_json()
-        amount = float(data.get('amount', 0))
-        order_type = data.get('order_type', 'course')
-        internship_id = data.get('internship_id')
-        internship_title = data.get('internship_title')
-        courses = data.get('courses', [])
-        customer_email = data.get('customer_email')
-        customer_phone = data.get('customer_phone')
-        
-        user = request.user
-        student = Student.query.get(user['id'])
-        
-        if amount <= 0:
-            return jsonify({'error': 'Invalid amount'}), 400
-        
-        # Generate unique order ID
-        unique_id = uuid.uuid4().hex[:8]
-        timestamp = int(datetime.now().timestamp())
-        order_id = f"{order_type}_{unique_id}_{timestamp}"
-        
-        # Get frontend URL for return
-        frontend_url = os.getenv('FRONTEND_URL', 'https://sjs-frontend-delta.vercel.app')
-        return_url = f"{frontend_url}/payment-verification"
-        
-        # Prepare customer details
-        customer_name = student.name if student else user.get('name', 'Test Customer')
-        customer_email = customer_email or (student.email if student else user.get('email', 'test@example.com'))
-        customer_phone = customer_phone or (student.phone if student else user.get('phone', '9999999999'))
-        
-        # Clean phone number for sandbox
-        customer_phone = str(customer_phone).replace('+', '').replace('-', '').replace(' ', '').strip()
-        if len(customer_phone) < 10:
-            customer_phone = '9999999999'
-        elif len(customer_phone) > 10:
-            if customer_phone.startswith('91') and len(customer_phone) == 12:
-                customer_phone = customer_phone[2:]
-            else:
-                customer_phone = customer_phone[-10:]
-        
-        # Ensure email is valid for sandbox
-        if not customer_email or '@' not in customer_email:
-            customer_email = 'test@example.com'
-        
-        # Sandbox order payload (minimal required)
-        order_payload = {
-            "order_id": order_id,
-            "order_amount": amount,
-            "order_currency": "INR",
-            "customer_details": {
-                "customer_id": str(user['id']),
-                "customer_email": customer_email,
-                "customer_phone": customer_phone,
-                "customer_name": customer_name[:50]
-            }
+    payment_methods = [
+        {
+            'id': 'upi',
+            'name': 'UPI (Google Pay / PhonePe / Paytm)',
+            'description': 'Instant access after payment submission',
+            'icon': 'mobile-alt',
+            'currency': 'INR',
+            'is_available': True,
+            'requires_screenshot': True
+        },
+        {
+            'id': 'paypal',
+            'name': 'PayPal',
+            'description': 'International payments via PayPal',
+            'icon': 'paypal',
+            'currency': 'USD/INR',
+            'is_available': True,
+            'requires_screenshot': True
+        },
+        {
+            'id': 'bank_transfer',
+            'name': 'Bank Transfer / NEFT / RTGS',
+            'description': 'Manual verification (24-48 hours)',
+            'icon': 'university',
+            'currency': 'INR',
+            'is_available': True,
+            'requires_screenshot': True
         }
-        
-        # Add return URL for sandbox
-        order_payload["order_meta"] = {
-            "return_url": return_url
-        }
-        
-        # Cashfree API headers
-        headers = {
-            "Content-Type": "application/json",
-            "x-api-version": "2022-09-01",  # Using stable version for sandbox
-            "x-client-id": CASHFREE_APP_ID,
-            "x-client-secret": CASHFREE_SECRET_KEY
-        }
-        
-        api_url = f"{CASHFREE_API_URL}/orders"
-        
-        print(f"📤 Creating Cashfree order: {order_id}")
-        print(f"   Mode: {CASHFREE_ENVIRONMENT.upper()}")
-        print(f"   Amount: ₹{amount}")
-        print(f"   Customer: {customer_phone}")
-        print(f"   API URL: {api_url}")
-        print(f"   Payload: {json_lib.dumps(order_payload, indent=2)}")
-        
-        try:
-            response = requests.post(api_url, json=order_payload, headers=headers, timeout=30)
-            
-            print(f"📥 Response Status: {response.status_code}")
-            
-            # Parse response
-            try:
-                result = response.json()
-                print(f"📥 Response Body: {json_lib.dumps(result, indent=2)}")
-            except:
-                print(f"📥 Raw Response: {response.text}")
-                result = {"error": "Invalid JSON response"}
-            
-            if response.status_code == 200:
-                payment_session_id = result.get('payment_session_id')
-                
-                if payment_session_id:
-                    print(f"✅ Payment Session ID: {payment_session_id}")
-                    
-                    # Store order in database
-                    if order_type == 'internship':
-                        new_order = InternshipOrder(
-                            order_id=order_id,
-                            student_id=user['id'],
-                            student_name=customer_name,
-                            student_email=customer_email,
-                            student_phone=customer_phone,
-                            internship_id=internship_id,
-                            internship_title=internship_title,
-                            amount=amount,
-                            payment_status='pending',
-                            payment_method='cashfree',
-                            cashfree_order_id=result.get('order_id', order_id),
-                            payment_session_id=payment_session_id
-                        )
-                    else:
-                        new_order = Order(
-                            order_id=order_id,
-                            student_id=user['id'],
-                            total_amount=amount,
-                            payment_status='pending',
-                            payment_method='cashfree',
-                            courses=courses,
-                            cashfree_order_id=result.get('order_id', order_id),
-                            payment_session_id=payment_session_id
-                        )
-                    
-                    db.session.add(new_order)
-                    db.session.commit()
-                    
-                    return jsonify({
-                        'success': True,
-                        'order_id': order_id,
-                        'payment_session_id': payment_session_id,
-                        'amount': amount,
-                        'currency': 'INR',
-                        'environment': CASHFREE_ENVIRONMENT
-                    }), 200
-                else:
-                    error_msg = result.get('message', 'Payment session ID missing')
-                    print(f"❌ No payment_session_id: {error_msg}")
-                    return jsonify({
-                        'success': False,
-                        'error': error_msg,
-                        'code': result.get('code'),
-                        'type': result.get('type'),
-                        'environment': CASHFREE_ENVIRONMENT
-                    }), 500
-            else:
-                error_msg = result.get('message', f'HTTP {response.status_code}')
-                print(f"❌ Cashfree API error: {error_msg}")
-                return jsonify({
-                    'success': False,
-                    'error': error_msg,
-                    'code': result.get('code'),
-                    'type': result.get('type'),
-                    'status_code': response.status_code,
-                    'environment': CASHFREE_ENVIRONMENT
-                }), response.status_code
-                
-        except requests.exceptions.Timeout:
-            print("❌ Cashfree API timeout")
-            return jsonify({'error': 'Payment gateway timeout. Please try again.'}), 504
-        except requests.exceptions.ConnectionError as e:
-            print(f"❌ Connection error: {e}")
-            return jsonify({'error': 'Cannot connect to payment gateway. Please try again.'}), 503
-            
-    except Exception as e:
-        print(f"❌ Cashfree order error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
-
-
-@payments_bp.route('/verify-cashfree-payment', methods=['POST', 'OPTIONS'])
-@token_required
-def verify_cashfree_payment():
-    """Verify Cashfree payment status"""
-    if request.method == 'OPTIONS':
-        return '', 200
+    ]
     
-    try:
-        data = request.get_json()
-        order_id = data.get('order_id')
-        
-        if not CASHFREE_AVAILABLE:
-            return jsonify({'error': 'Cashfree not configured'}), 400
-        
-        # Find order in database
-        order = Order.query.filter_by(order_id=order_id).first()
-        if not order:
-            order = InternshipOrder.query.filter_by(order_id=order_id).first()
-        
-        if not order:
-            return jsonify({'error': 'Order not found'}), 404
-        
-        cashfree_order_id = getattr(order, 'cashfree_order_id', order_id)
-        
-        headers = {
-            "Content-Type": "application/json",
-            "x-api-version": "2022-09-01",
-            "x-client-id": CASHFREE_APP_ID,
-            "x-client-secret": CASHFREE_SECRET_KEY
-        }
-        
-        api_url = f"{CASHFREE_API_URL}/orders/{cashfree_order_id}"
-        
-        response = requests.get(api_url, headers=headers, timeout=30)
-        result = response.json()
-        
-        print(f"Verify response: {json_lib.dumps(result, indent=2)}")
-        
-        if response.status_code == 200:
-            order_status = result.get('order_status')
-            
-            if order_status == 'PAID':
-                order.payment_status = 'completed'
-                db.session.commit()
-                
-                # Enroll in courses
-                if hasattr(order, 'courses') and order.courses:
-                    from app.models.course import Enrollment, Course
-                    for course_data in order.courses:
-                        course_id = course_data.get('id') if isinstance(course_data, dict) else getattr(course_data, 'id', None)
-                        if course_id:
-                            existing = Enrollment.query.filter_by(
-                                student_id=order.student_id,
-                                course_id=course_id
-                            ).first()
-                            if not existing:
-                                enrollment = Enrollment(
-                                    student_id=order.student_id,
-                                    course_id=course_id,
-                                    enrolled_at=datetime.utcnow(),
-                                    status='active'
-                                )
-                                db.session.add(enrollment)
-                                
-                                course = Course.query.get(course_id)
-                                if course:
-                                    course.students_enrolled = (course.students_enrolled or 0) + 1
-                                
-                                student = Student.query.get(order.student_id)
-                                if student:
-                                    if student.course_ids is None:
-                                        student.course_ids = []
-                                    if course_id not in student.course_ids:
-                                        student.course_ids.append(course_id)
-                    db.session.commit()
-                
-                return jsonify({
-                    'success': True, 
-                    'status': 'PAID',
-                    'message': 'Payment verified successfully'
-                }), 200
-            else:
-                return jsonify({
-                    'success': False, 
-                    'status': order_status,
-                    'message': f'Payment status: {order_status}'
-                }), 200
-        
-        return jsonify({'error': 'Failed to verify payment'}), 500
-        
-    except Exception as e:
-        print(f"Cashfree verification error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@payments_bp.route('/cashfree-webhook', methods=['POST'])
-def cashfree_webhook():
-    """Cashfree webhook for automatic payment confirmation"""
-    try:
-        data = request.get_json()
-        print(f"Webhook received: {json_lib.dumps(data, indent=2)}")
-        
-        order_id = data.get('order_id')
-        order_status = data.get('order_status')
-        
-        if order_status == 'PAID':
-            order = Order.query.filter_by(order_id=order_id).first()
-            if not order:
-                order = InternshipOrder.query.filter_by(order_id=order_id).first()
-            
-            if order and order.payment_status != 'completed':
-                order.payment_status = 'completed'
-                db.session.commit()
-                print(f"✅ Webhook: Order {order_id} marked as PAID")
-        
-        return jsonify({'status': 'ok'}), 200
-        
-    except Exception as e:
-        print(f"Webhook error: {e}")
-        return jsonify({'error': str(e)}), 500
+    return jsonify({
+        'success': True,
+        'payment_methods': payment_methods,
+        'environment': 'production'
+    }), 200
 
 
 # =====================================================
-# REST OF YOUR EXISTING CODE (unchanged from your original)
+# USER ENDPOINTS
 # =====================================================
 
 @payments_bp.route('/upload-screenshot', methods=['POST', 'OPTIONS'])
@@ -962,6 +626,7 @@ def upload_screenshot():
         
         file = request.files['screenshot']
         order_id = request.form.get('order_id')
+        payment_method = request.form.get('payment_method', 'upi')
         
         if not order_id:
             return jsonify({'error': 'Order ID is required'}), 400
@@ -974,13 +639,14 @@ def upload_screenshot():
         
         screenshot_url = None
         
+        # Try Cloudinary first
         if CLOUDINARY_ENABLED:
             try:
                 file.seek(0)
                 upload_result = cloudinary.uploader.upload(
                     file,
                     folder='sjs-academy/payments',
-                    public_id=f"{order_id}_{int(datetime.now().timestamp())}",
+                    public_id=f"{order_id}_{payment_method}_{int(datetime.now().timestamp())}",
                     overwrite=True,
                     resource_type='auto'
                 )
@@ -990,11 +656,12 @@ def upload_screenshot():
                 print(f"Cloudinary upload failed: {e}")
                 screenshot_url = None
         
+        # Fallback to local storage
         if not screenshot_url:
             file.seek(0)
             original_filename = secure_filename(file.filename)
             timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-            filename = f"{order_id}_{timestamp}_{original_filename}"
+            filename = f"{order_id}_{payment_method}_{timestamp}_{original_filename}"
             upload_dir = os.path.join('uploads', 'screenshots')
             os.makedirs(upload_dir, exist_ok=True)
             filepath = os.path.join(upload_dir, filename)
@@ -1002,14 +669,17 @@ def upload_screenshot():
             screenshot_url = f"/uploads/screenshots/{filename}"
             print(f"✅ Screenshot saved locally: {filepath}")
         
+        # Update order with screenshot URL
         order = Order.query.filter_by(order_id=order_id).first()
         if order:
             order.screenshot_url = screenshot_url
+            order.payment_method = payment_method
             db.session.commit()
         
         internship_order = InternshipOrder.query.filter_by(order_id=order_id).first()
         if internship_order:
             internship_order.screenshot_url = screenshot_url
+            internship_order.payment_method = payment_method
             db.session.commit()
         
         return jsonify({
@@ -1050,6 +720,7 @@ def submit_verification():
         
         user = request.user
         
+        # Find order
         order = Order.query.filter_by(order_id=order_id, student_id=user['id']).first()
         internship_order = None
         
@@ -1059,6 +730,7 @@ def submit_verification():
         if not order and not internship_order:
             return jsonify({'error': 'Order not found'}), 404
         
+        # Check for existing verification
         existing = PaymentVerification.query.filter_by(order_id=order_id).first()
         if existing:
             return jsonify({'error': 'Verification already submitted'}), 400
@@ -1087,13 +759,15 @@ def submit_verification():
         if order:
             order.transaction_id = transaction_id
             order.payment_status = 'pending_verification'
+            order.payment_method = payment_method
         elif internship_order:
             internship_order.transaction_id = transaction_id
             internship_order.payment_status = 'pending_verification'
+            internship_order.payment_method = payment_method
         
         db.session.commit()
         
-        print(f"✅ Verification submitted: {verification_id}")
+        print(f"✅ Verification submitted: {verification_id} via {payment_method}")
         
         return jsonify({
             'success': True,
@@ -1135,6 +809,7 @@ def get_verification_status(verification_id):
             'status': verification.status,
             'message': status_messages.get(verification.status, ''),
             'admin_notes': verification.admin_notes,
+            'payment_method': getattr(verification, 'payment_method', 'upi'),
             'verified_at': verification.verified_at.isoformat() if hasattr(verification, 'verified_at') and verification.verified_at else None
         }), 200
     except Exception as e:
@@ -1143,12 +818,13 @@ def get_verification_status(verification_id):
 
 
 # =====================================================
-# ADMIN ENDPOINTS (unchanged from your original)
+# ADMIN ENDPOINTS
 # =====================================================
 
 @payments_bp.route('/admin/payment-requests', methods=['GET', 'OPTIONS'])
 @admin_required
 def get_payment_requests():
+    """Get all pending payment verifications (Admin)"""
     if request.method == 'OPTIONS':
         return '', 200
     
@@ -1169,7 +845,7 @@ def get_payment_requests():
                 'amount': float(v.amount) if v.amount else 0,
                 'transaction_id': v.transaction_id,
                 'screenshot_url': v.screenshot_url,
-                'payment_method': getattr(v, 'payment_method', 'bank_transfer'),
+                'payment_method': getattr(v, 'payment_method', 'upi'),
                 'status': v.status,
                 'created_at': v.created_at.isoformat() if v.created_at else None
             })
@@ -1186,6 +862,7 @@ def get_payment_requests():
 @payments_bp.route('/admin/payment-requests/<int:request_id>/approve', methods=['POST', 'OPTIONS'])
 @admin_required
 def approve_payment(request_id):
+    """Approve payment verification (Admin)"""
     if request.method == 'OPTIONS':
         return '', 200
     
@@ -1193,44 +870,73 @@ def approve_payment(request_id):
         data = request.get_json()
         admin_notes = data.get('notes', 'Payment verified and approved.')
         
+        # Get verification record
         verification = PaymentVerification.query.get(request_id)
         if not verification:
             return jsonify({'error': 'Verification not found'}), 404
         
+        # Update verification status
         verification.status = 'approved'
         verification.admin_notes = admin_notes
         verification.verified_at = datetime.utcnow()
         
+        # Get the order
         order = Order.query.filter_by(order_id=verification.order_id).first()
         if not order:
+            # Check if it's an internship order
             internship_order = InternshipOrder.query.filter_by(order_id=verification.order_id).first()
             if internship_order:
                 internship_order.payment_status = 'completed'
                 internship_order.status = 'active'
-            return jsonify({'success': True, 'message': 'Payment approved!'}), 200
+                db.session.commit()
+                return jsonify({
+                    'success': True,
+                    'message': 'Internship payment approved successfully!'
+                }), 200
+            return jsonify({'error': 'Order not found'}), 404
         
+        # Update order status
         order.payment_status = 'completed'
         order.transaction_id = verification.transaction_id
         
+        # Get courses from order
         order_courses = order.courses if isinstance(order.courses, list) else []
         
+        print(f"\n{'='*60}")
+        print(f"📝 APPROVING PAYMENT - Adding to Enrollment")
+        print(f"Order ID: {order.order_id}")
+        print(f"Student ID: {verification.student_id}")
+        print(f"Student Email: {verification.student_email}")
+        print(f"Payment Method: {getattr(verification, 'payment_method', 'upi')}")
+        print(f"Order Courses: {order_courses}")
+        print(f"{'='*60}\n")
+        
+        # Import models
         from app.models.course import Enrollment, Course
         
         courses_added = []
         
+        # For each course in the order, add to enrollments table
         for course_data in order_courses:
+            # Get course ID
             if isinstance(course_data, dict):
                 course_id = course_data.get('id')
+                course_name = course_data.get('name', 'Unknown')
             else:
                 course_id = getattr(course_data, 'id', None)
+                course_name = getattr(course_data, 'name', 'Unknown')
             
             if course_id:
+                print(f"Processing course ID: {course_id} - {course_name}")
+                
+                # Check if already enrolled
                 existing = Enrollment.query.filter_by(
                     student_id=verification.student_id,
                     course_id=course_id
                 ).first()
                 
                 if not existing:
+                    # Create enrollment
                     enrollment = Enrollment(
                         student_id=verification.student_id,
                         course_id=course_id,
@@ -1240,24 +946,48 @@ def approve_payment(request_id):
                     )
                     db.session.add(enrollment)
                     courses_added.append(course_id)
+                    print(f"✅ Added to enrollments table: student_id={verification.student_id}, course_id={course_id}")
                     
+                    # Update student's course_ids JSON field
                     student = Student.query.get(verification.student_id)
                     if student:
                         if student.course_ids is None:
                             student.course_ids = []
                         if course_id not in student.course_ids:
                             student.course_ids.append(course_id)
+                            print(f"✅ Added course {course_id} to student.course_ids")
                     
+                    # Update course student count
                     course = Course.query.get(course_id)
                     if course:
                         course.students_enrolled = (course.students_enrolled or 0) + 1
+                        db.session.add(course)
+                        print(f"✅ Updated course {course_id} students_enrolled to {course.students_enrolled}")
+                else:
+                    print(f"⚠️ Already enrolled in course {course_id}")
         
+        # Commit all changes
         db.session.commit()
+        
+        # Verify enrollment was added
+        verify_enrollments = Enrollment.query.filter_by(
+            student_id=verification.student_id
+        ).all()
+        
+        print(f"\n📊 Enrollment Summary:")
+        print(f"   Total enrollments for student {verification.student_id}: {len(verify_enrollments)}")
+        for enc in verify_enrollments:
+            print(f"   - Course ID: {enc.course_id}, Status: {enc.status}")
+        
+        print(f"\n✅ Payment approved successfully!")
+        print(f"   Courses added: {courses_added}")
+        print(f"{'='*60}\n")
         
         return jsonify({
             'success': True,
-            'message': 'Payment approved successfully!',
-            'courses_added': courses_added
+            'message': 'Payment approved successfully! Courses added to student account.',
+            'courses_added': courses_added,
+            'total_enrollments': len(verify_enrollments)
         }), 200
         
     except Exception as e:
@@ -1271,6 +1001,7 @@ def approve_payment(request_id):
 @payments_bp.route('/admin/payment-requests/<int:request_id>/decline', methods=['POST', 'OPTIONS'])
 @admin_required
 def decline_payment(request_id):
+    """Decline payment verification (Admin)"""
     if request.method == 'OPTIONS':
         return '', 200
     
@@ -1286,6 +1017,7 @@ def decline_payment(request_id):
         verification.admin_notes = admin_notes
         verification.verified_at = datetime.utcnow()
         
+        # Update order status
         order = Order.query.filter_by(order_id=verification.order_id).first()
         if order:
             order.payment_status = 'failed'
@@ -1296,7 +1028,12 @@ def decline_payment(request_id):
         
         db.session.commit()
         
-        return jsonify({'success': True, 'message': 'Payment declined.'}), 200
+        print(f"✅ Payment declined: {verification.verification_id}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Payment declined.'
+        }), 200
     except Exception as e:
         db.session.rollback()
         print(f"Decline error: {e}")
@@ -1306,6 +1043,7 @@ def decline_payment(request_id):
 @payments_bp.route('/admin/payment-stats', methods=['GET', 'OPTIONS'])
 @admin_required
 def get_payment_stats():
+    """Get payment statistics (Admin)"""
     if request.method == 'OPTIONS':
         return '', 200
     
@@ -1329,3 +1067,6 @@ def get_payment_stats():
         }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+
